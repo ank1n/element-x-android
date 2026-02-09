@@ -114,6 +114,9 @@ fun HomeSpacesView(
     }
 }
 
+/**
+ * Ref: https://www.figma.com/design/pDlJZGBsri47FNTXMnEdXB/Compound-Android-Templates?node-id=1763-74215&t=9IGKMXHDfTGAqzQK-4
+ */
 @Composable
 private fun EmptySpaceHomeView(
     onCreateSpaceClick: () -> Unit,
@@ -143,7 +146,10 @@ private fun EmptySpaceHomeView(
             }
         },
         footer = {
-            ButtonColumnMolecule {
+            ButtonColumnMolecule(
+                // Add a padding bottom for the navigation bar
+                modifier = Modifier.padding(bottom = 112.dp)
+            ) {
                 Button(
                     modifier = Modifier.fillMaxWidth(),
                     text = stringResource(CommonStrings.action_create_space),
@@ -158,8 +164,7 @@ private fun EmptySpaceHomeView(
                 }
             }
         }
-    ) {
-    }
+    )
 }
 
 @PreviewsDayNight
