@@ -118,9 +118,9 @@ jobs:
           LOG_LINES="$(tail -n 30 $LOG_FILE)"
           echo "### Maestro tests worked :rocket:!
           
-          ```
+          \`\`\`
           $LOG_LINES
-          ```" >> $GITHUB_STEP_SUMMARY
+          \`\`\`" >> $GITHUB_STEP_SUMMARY
       - name: Update summary (failure)
         if: steps.maestro_test.outcome != 'success'
         run: |
@@ -129,9 +129,9 @@ jobs:
           LOG_LINES="$(tail -n 30 $LOG_FILE)"
           echo "### Maestro tests failed...
           
-          ```
+          \`\`\`
           $LOG_LINES
-          ```" >> $GITHUB_STEP_SUMMARY
+          \`\`\`" >> $GITHUB_STEP_SUMMARY
       - name: Fail the workflow in case of error in test
         if: steps.maestro_test.outcome != 'success'
         run: |
