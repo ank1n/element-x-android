@@ -115,7 +115,7 @@ fun HomeTopBar(
                             else -> stringResource(selectedNavigationItem.labelRes)
                         }
                     }
-                    HomeNavigationBarItem.Spaces -> stringResource(selectedNavigationItem.labelRes)
+                    else -> stringResource(selectedNavigationItem.labelRes)
                 }
                 Text(
                     modifier = Modifier.semantics {
@@ -141,10 +141,7 @@ fun HomeTopBar(
                         canReportBug = canReportBug,
                         spaceFiltersState = spaceFiltersState,
                     )
-                    HomeNavigationBarItem.Spaces -> SpacesMenuItems(
-                        canCreateSpaces = canCreateSpaces,
-                        onCreateSpace = onCreateSpace
-                    )
+                    else -> {}
                 }
             },
             // We want a 16dp left padding for the navigationIcon :
@@ -401,9 +398,9 @@ internal fun HomeTopBarSpaceFiltersSelectedPreview() = ElementPreview {
 @OptIn(ExperimentalMaterial3Api::class)
 @PreviewsDayNight
 @Composable
-internal fun HomeTopBarSpacesPreview() = ElementPreview {
+internal fun HomeTopBarContactsPreview() = ElementPreview {
     HomeTopBar(
-        selectedNavigationItem = HomeNavigationBarItem.Spaces,
+        selectedNavigationItem = HomeNavigationBarItem.Contacts,
         currentUserAndNeighbors = persistentListOf(MatrixUser(UserId("@id:domain"), "Alice")),
         showAvatarIndicator = false,
         areSearchResultsDisplayed = false,

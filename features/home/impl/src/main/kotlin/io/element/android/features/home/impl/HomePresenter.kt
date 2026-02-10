@@ -83,21 +83,11 @@ class HomePresenter(
         fun handleEvent(event: HomeEvent) {
             when (event) {
                 is HomeEvent.SelectHomeNavigationBarItem -> coroutineState.launch {
-                    if (event.item == HomeNavigationBarItem.Spaces) {
-                        announcementService.showAnnouncement(Announcement.Space)
-                    }
                     currentHomeNavigationBarItemOrdinal = event.item.ordinal
                 }
                 is HomeEvent.SwitchToAccount -> coroutineState.launch {
                     sessionStore.setLatestSession(event.sessionId.value)
                 }
-            }
-        }
-
-        LaunchedEffect(homeSpacesState.canCreateSpaces, homeSpacesState.spaceRooms.isEmpty()) {
-            // If the flag to create spaces is disabled and the last space is left, ensure that the Chat view is rendered.
-            if (!homeSpacesState.canCreateSpaces && homeSpacesState.spaceRooms.isEmpty()) {
-                currentHomeNavigationBarItemOrdinal = HomeNavigationBarItem.Chats.ordinal
             }
         }
         val snackbarMessage by snackbarDispatcher.collectSnackbarMessageAsState()

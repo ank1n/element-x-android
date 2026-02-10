@@ -16,19 +16,31 @@ enum class HomeNavigationBarItem(
     @StringRes
     val labelRes: Int,
 ) {
+    Contacts(
+        labelRes = R.string.screen_home_tab_contacts
+    ),
+    Calls(
+        labelRes = R.string.screen_home_tab_calls
+    ),
     Chats(
         labelRes = R.string.screen_home_tab_chats
     ),
-    Spaces(
-        labelRes = R.string.screen_home_tab_spaces
+    Apps(
+        labelRes = R.string.screen_home_tab_apps
+    ),
+    Settings(
+        labelRes = R.string.screen_home_tab_settings
     );
 
     @Composable
     fun icon(
         isSelected: Boolean,
     ) = when (this) {
+        Contacts -> if (isSelected) CompoundIcons.UserProfileSolid() else CompoundIcons.UserProfile()
+        Calls -> if (isSelected) CompoundIcons.VoiceCallSolid() else CompoundIcons.VoiceCall()
         Chats -> if (isSelected) CompoundIcons.ChatSolid() else CompoundIcons.Chat()
-        Spaces -> if (isSelected) CompoundIcons.SpaceSolid() else CompoundIcons.Space()
+        Apps -> if (isSelected) CompoundIcons.ExtensionsSolid() else CompoundIcons.Extensions()
+        Settings -> if (isSelected) CompoundIcons.SettingsSolid() else CompoundIcons.Settings()
     }
 
     companion object {

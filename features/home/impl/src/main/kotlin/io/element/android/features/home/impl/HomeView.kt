@@ -12,7 +12,9 @@ package io.element.android.features.home.impl
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -26,6 +28,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -53,7 +56,6 @@ import io.element.android.features.home.impl.search.RoomListSearchView
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersEvent
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersView
-import io.element.android.features.home.impl.spaces.HomeSpacesView
 import io.element.android.libraries.androidutils.throttler.FirstThrottler
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
@@ -169,7 +171,6 @@ private fun HomeScaffold(
 
     val hazeState = rememberHazeState()
     val roomsLazyListState = rememberLazyListState()
-    val spacesLazyListState = rememberLazyListState()
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -206,17 +207,14 @@ private fun HomeScaffold(
                     onItemClick = { item ->
                         // scroll to top if selecting the same item
                         if (item == state.currentHomeNavigationBarItem) {
-                            val lazyListStateTarget = when (item) {
-                                HomeNavigationBarItem.Chats -> roomsLazyListState
-                                HomeNavigationBarItem.Spaces -> spacesLazyListState
-                            }
-                            coroutineScope.launch {
-                                if (lazyListStateTarget.firstVisibleItemIndex > 10) {
-                                    lazyListStateTarget.scrollToItem(10)
+                            if (item == HomeNavigationBarItem.Chats) {
+                                coroutineScope.launch {
+                                    if (roomsLazyListState.firstVisibleItemIndex > 10) {
+                                        roomsLazyListState.scrollToItem(10)
+                                    }
+                                    scrollBehavior.state.heightOffset = 0f
+                                    roomsLazyListState.animateScrollToItem(0)
                                 }
-                                // Also reset the scrollBehavior height offset as it's not triggered by programmatic scrolls
-                                scrollBehavior.state.heightOffset = 0f
-                                lazyListStateTarget.animateScrollToItem(0)
                             }
                         } else {
                             state.eventSink(HomeEvent.SelectHomeNavigationBarItem(item))
@@ -231,6 +229,26 @@ private fun HomeScaffold(
         },
         content = { padding ->
             when (state.currentHomeNavigationBarItem) {
+                HomeNavigationBarItem.Contacts -> {
+                    StalkPlaceholderView(
+                        title = stringResource(R.string.screen_home_tab_contacts),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .consumeWindowInsets(padding)
+                            .hazeSource(state = hazeState)
+                    )
+                }
+                HomeNavigationBarItem.Calls -> {
+                    StalkPlaceholderView(
+                        title = stringResource(R.string.screen_home_tab_calls),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .consumeWindowInsets(padding)
+                            .hazeSource(state = hazeState)
+                    )
+                }
                 HomeNavigationBarItem.Chats -> {
                     RoomListContentView(
                         contentState = roomListState.contentState,
@@ -267,21 +285,24 @@ private fun HomeScaffold(
                     )
                     SpaceFiltersView(roomListState.spaceFiltersState)
                 }
-                HomeNavigationBarItem.Spaces -> {
-                    HomeSpacesView(
+                HomeNavigationBarItem.Apps -> {
+                    StalkPlaceholderView(
+                        title = stringResource(R.string.screen_home_tab_apps),
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
                             .consumeWindowInsets(padding)
-                            .hazeSource(state = hazeState),
-                        state = state.homeSpacesState,
-                        lazyListState = spacesLazyListState,
-                        onSpaceClick = { spaceId ->
-                            onRoomClick(spaceId)
-                        },
-                        onCreateSpaceClick = onCreateSpaceClick,
-                        // TODO use actual callbacks for this
-                        onExploreClick = {},
+                            .hazeSource(state = hazeState)
+                    )
+                }
+                HomeNavigationBarItem.Settings -> {
+                    StalkPlaceholderView(
+                        title = stringResource(R.string.screen_home_tab_settings),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .consumeWindowInsets(padding)
+                            .hazeSource(state = hazeState)
                     )
                 }
             }
@@ -335,6 +356,20 @@ private fun HomeBottomBar(
 }
 
 internal fun RoomListRoomSummary.contentType() = displayType.ordinal
+
+@Composable
+private fun StalkPlaceholderView(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        NavigationBarText(text = title)
+    }
+}
 
 @PreviewsDayNight
 @Composable
