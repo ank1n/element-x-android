@@ -118,7 +118,7 @@ jobs:
         run: |
           LOG_FILE=$(find -name maestro.log ~/.maestro/tests/)
           LOG_LINES=$(tail -n 30 $LOG_FILE)
-          echo "### Maestro tests failed...\n\n$LOG_LINES" >> $GITHUB_STEP_SUMMARY
+          echo "### Maestro tests failed...\n\n```\n$LOG_LINES\n```" >> $GITHUB_STEP_SUMMARY
       - name: Fail the workflow in case of error in test
         if: steps.maestro_test.outcome != 'success'
         run: |
