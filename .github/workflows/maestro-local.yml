@@ -112,7 +112,10 @@ jobs:
           if-no-files-found: error
       - name: Update summary (success)
         if: steps.maestro_test.outcome == 'success'
-        run: echo "### Maestro tests worked :rocket:!" >> $GITHUB_STEP_SUMMARY
+        run: |
+          LOG_FILE=$(find -name maestro.log ~/.maestro/tests/)
+          LOG_LINES=$(tail -n 30 $LOG_FILE)
+          echo "### Maestro tests worked :rocket:!\n\n```\n$LOG_LINES\n```" >> $GITHUB_STEP_SUMMARY
       - name: Update summary (failure)
         if: steps.maestro_test.outcome != 'success'
         run: |
