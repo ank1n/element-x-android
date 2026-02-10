@@ -114,14 +114,24 @@ jobs:
         if: steps.maestro_test.outcome == 'success'
         run: |
           LOG_FILE=$(find ~/.maestro/tests/ -name maestro.log)
+          echo "Log file: $LOG_FILE"
           LOG_LINES=$(tail -n 30 $LOG_FILE)
-          echo "### Maestro tests worked :rocket:!\n\n```\n$LOG_LINES\n```" >> $GITHUB_STEP_SUMMARY
+          echo "### Maestro tests worked :rocket:!
+          
+          ```
+          $LOG_LINES
+          ```" >> $GITHUB_STEP_SUMMARY
       - name: Update summary (failure)
         if: steps.maestro_test.outcome != 'success'
         run: |
           LOG_FILE=$(find ~/.maestro/tests/ -name maestro.log)
+          echo "Log file: $LOG_FILE"
           LOG_LINES=$(tail -n 30 $LOG_FILE)
-          echo "### Maestro tests failed...\n\n```\n$LOG_LINES\n```" >> $GITHUB_STEP_SUMMARY
+          echo "### Maestro tests failed...
+          
+          ```
+          $LOG_LINES
+          ```" >> $GITHUB_STEP_SUMMARY
       - name: Fail the workflow in case of error in test
         if: steps.maestro_test.outcome != 'success'
         run: |
