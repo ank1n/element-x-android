@@ -44,6 +44,7 @@ import dev.chrisbanes.haze.materials.HazeMaterials
 import dev.chrisbanes.haze.rememberHazeState
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.features.home.impl.calls.CallsView
 import io.element.android.features.home.impl.contacts.ContactsView
 import io.element.android.features.home.impl.components.HomeTopBar
 import io.element.android.features.home.impl.components.RoomListContentView
@@ -242,8 +243,9 @@ private fun HomeScaffold(
                     )
                 }
                 HomeNavigationBarItem.Calls -> {
-                    StalkPlaceholderView(
-                        title = stringResource(R.string.screen_home_tab_calls),
+                    CallsView(
+                        contentState = roomListState.contentState,
+                        onRoomClick = { onRoomClick(it) },
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
