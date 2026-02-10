@@ -1,5 +1,8 @@
 appId: ${MAESTRO_APP_ID}
 ---
+- extendedWaitUntil:
+    visible: "Enter recovery key"
+    timeout: 30000
 - takeScreenshot: build/maestro/150-Verify
 - tapOn: "Enter recovery key"
 - tapOn:
