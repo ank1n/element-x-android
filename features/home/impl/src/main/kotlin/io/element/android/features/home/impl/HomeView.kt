@@ -44,6 +44,7 @@ import dev.chrisbanes.haze.materials.HazeMaterials
 import dev.chrisbanes.haze.rememberHazeState
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.features.home.impl.contacts.ContactsView
 import io.element.android.features.home.impl.components.HomeTopBar
 import io.element.android.features.home.impl.components.RoomListContentView
 import io.element.android.features.home.impl.components.RoomListMenuAction
@@ -230,8 +231,9 @@ private fun HomeScaffold(
         content = { padding ->
             when (state.currentHomeNavigationBarItem) {
                 HomeNavigationBarItem.Contacts -> {
-                    StalkPlaceholderView(
-                        title = stringResource(R.string.screen_home_tab_contacts),
+                    ContactsView(
+                        contentState = roomListState.contentState,
+                        onContactClick = { onRoomClick(it) },
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
