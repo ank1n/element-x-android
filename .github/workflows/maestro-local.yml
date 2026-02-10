@@ -113,14 +113,7 @@ jobs:
       - name: Update summary (success)
         if: steps.maestro_test.outcome == 'success'
         run: |
-          LOG_FILE=$(find ~/.maestro/tests/ -name maestro.log)
-          echo "Log file: $LOG_FILE"
-          LOG_LINES="$(tail -n 30 $LOG_FILE)"
-          echo "### Maestro tests worked :rocket:!
-          
-          \`\`\`
-          $LOG_LINES
-          \`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "### Maestro tests worked :rocket:!"
       - name: Update summary (failure)
         if: steps.maestro_test.outcome != 'success'
         run: |
