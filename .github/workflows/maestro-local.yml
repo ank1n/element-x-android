@@ -115,7 +115,7 @@ jobs:
         run: |
           LOG_FILE=$(find ~/.maestro/tests/ -name maestro.log)
           echo "Log file: $LOG_FILE"
-          LOG_LINES=$(tail -n 30 $LOG_FILE)
+          LOG_LINES="$(tail -n 30 $LOG_FILE)"
           echo "### Maestro tests worked :rocket:!
           
           ```
@@ -126,7 +126,7 @@ jobs:
         run: |
           LOG_FILE=$(find ~/.maestro/tests/ -name maestro.log)
           echo "Log file: $LOG_FILE"
-          LOG_LINES=$(tail -n 30 $LOG_FILE)
+          LOG_LINES="$(tail -n 30 $LOG_FILE)"
           echo "### Maestro tests failed...
           
           ```
