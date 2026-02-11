@@ -182,6 +182,7 @@ internal fun createHomePresenter(
     homeSpacesPresenter: Presenter<HomeSpacesState> = Presenter { aHomeSpacesState() },
     sessionStore: SessionStore = InMemorySessionStore(),
     announcementService: AnnouncementService = FakeAnnouncementService(),
+    appsRepository: io.element.android.features.home.impl.apps.AppsRepository = FakeAppsRepository(),
 ) = HomePresenter(
     client = client,
     syncService = syncService,
@@ -193,4 +194,11 @@ internal fun createHomePresenter(
     rageshakeFeatureAvailability = rageshakeFeatureAvailability,
     sessionStore = sessionStore,
     announcementService = announcementService,
+    appsRepository = appsRepository,
 )
+
+private class FakeAppsRepository : io.element.android.features.home.impl.apps.AppsRepository {
+    override suspend fun getWidgets(category: String?): Result<List<io.element.android.features.home.impl.apps.WidgetItem>> {
+        return Result.success(emptyList())
+    }
+}

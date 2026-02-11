@@ -14,11 +14,18 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Inject
+import io.element.android.features.home.impl.apps.AppsCategory
+import io.element.android.features.home.impl.apps.AppsEvent
+import io.element.android.features.home.impl.apps.AppsRepository
+import io.element.android.features.home.impl.apps.AppsState
+import io.element.android.features.home.impl.apps.WidgetItem
+import kotlinx.collections.immutable.toImmutableList
 import io.element.android.features.announcement.api.Announcement
 import io.element.android.features.announcement.api.AnnouncementService
 import io.element.android.features.home.impl.roomlist.RoomListState
@@ -48,6 +55,7 @@ class HomePresenter(
     private val rageshakeFeatureAvailability: RageshakeFeatureAvailability,
     private val sessionStore: SessionStore,
     private val announcementService: AnnouncementService,
+    private val appsRepository: AppsRepository,
 ) : Presenter<HomeState> {
     private val currentUserWithNeighborsBuilder = CurrentUserWithNeighborsBuilder()
 
@@ -80,6 +88,52 @@ class HomePresenter(
         val showAvatarIndicator by indicatorService.showRoomListTopBarIndicator()
         val directLogoutState = logoutPresenter.present()
 
+        // sTalk: Apps tab state
+        var appsWidgets by remember { mutableStateOf(persistentListOf<WidgetItem>()) }
+        var appsLoading by remember { mutableStateOf(false) }
+        var appsError by remember { mutableStateOf<String?>(null) }
+        var appsCategory by remember { mutableStateOf(AppsCategory.All) }
+        var appsSelectedWidget by remember { mutableStateOf<WidgetItem?>(null) }
+
+        fun loadWidgets(category: AppsCategory) {
+            coroutineState.launch {
+                appsLoading = true
+                appsError = null
+                appsRepository.getWidgets(category.apiValue)
+                    .onSuccess { appsWidgets = it.toImmutableList() }
+                    .onFailure { appsError = it.message }
+                appsLoading = false
+            }
+        }
+
+        // Load widgets when Apps tab is selected
+        LaunchedEffect(currentHomeNavigationBarItem) {
+            if (currentHomeNavigationBarItem == HomeNavigationBarItem.Apps) {
+                loadWidgets(appsCategory)
+            }
+        }
+
+        fun handleAppsEvent(event: AppsEvent) {
+            when (event) {
+                is AppsEvent.SelectCategory -> {
+                    appsCategory = event.category
+                    loadWidgets(event.category)
+                }
+                is AppsEvent.OpenWidget -> appsSelectedWidget = event.widget
+                is AppsEvent.CloseWidget -> appsSelectedWidget = null
+                is AppsEvent.Refresh -> loadWidgets(appsCategory)
+            }
+        }
+
+        val appsState = AppsState(
+            widgets = appsWidgets,
+            isLoading = appsLoading,
+            error = appsError,
+            selectedCategory = appsCategory,
+            selectedWidget = appsSelectedWidget,
+            eventSink = ::handleAppsEvent,
+        )
+
         fun handleEvent(event: HomeEvent) {
             when (event) {
                 is HomeEvent.SelectHomeNavigationBarItem -> coroutineState.launch {
@@ -101,6 +155,7 @@ class HomePresenter(
             snackbarMessage = snackbarMessage,
             canReportBug = canReportBug,
             directLogoutState = directLogoutState,
+            appsState = appsState,
             eventSink = ::handleEvent,
         )
     }
