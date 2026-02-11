@@ -20,12 +20,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.features.home.impl.components.StalkUnderlineFilter
 import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.libraries.designsystem.components.avatar.Avatar
@@ -35,6 +39,13 @@ import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.matrix.api.core.RoomId
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+
+private enum class CallsFilter(val displayName: String) {
+    All("All"),
+    Missed("Missed"),
+    Outgoing("Outgoing"),
+    Incoming("Incoming"),
+}
 
 /**
  * Calls view showing rooms with active or recent calls.
@@ -46,6 +57,8 @@ fun CallsView(
     onRoomClick: (RoomId) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var selectedFilter by remember { mutableStateOf(CallsFilter.All) }
+
     val activeCalls: ImmutableList<RoomListRoomSummary> = remember(contentState) {
         when (contentState) {
             is RoomListContentState.Rooms -> contentState.summaries
@@ -55,35 +68,55 @@ fun CallsView(
         }
     }
 
-    if (activeCalls.isEmpty()) {
-        Column(
-            modifier = modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
+    Column(modifier = modifier.fillMaxSize()) {
+        // Underline filters
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Icon(
-                imageVector = CompoundIcons.VoiceCall(),
-                contentDescription = null,
-                tint = ElementTheme.colors.iconSecondary,
-                modifier = Modifier.size(48.dp),
-            )
-            Spacer(modifier = Modifier.size(16.dp))
-            Text(
-                text = "No calls yet",
-                style = ElementTheme.typography.fontBodyLgRegular,
-                color = ElementTheme.colors.textSecondary,
-            )
-        }
-    } else {
-        LazyColumn(modifier = modifier.fillMaxSize()) {
-            items(
-                items = activeCalls,
-                key = { it.roomId.value },
-            ) { room ->
-                CallItem(
-                    room = room,
-                    onClick = { onRoomClick(room.roomId) },
+            CallsFilter.entries.forEach { filter ->
+                StalkUnderlineFilter(
+                    text = filter.displayName,
+                    isSelected = selectedFilter == filter,
+                    onClick = { selectedFilter = filter },
                 )
+            }
+        }
+
+        if (activeCalls.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    imageVector = CompoundIcons.VoiceCall(),
+                    contentDescription = null,
+                    tint = ElementTheme.colors.iconSecondary,
+                    modifier = Modifier.size(48.dp),
+                )
+                Spacer(modifier = Modifier.size(16.dp))
+                Text(
+                    text = "No calls yet",
+                    style = ElementTheme.typography.fontBodyLgRegular,
+                    color = ElementTheme.colors.textSecondary,
+                )
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(
+                    items = activeCalls,
+                    key = { it.roomId.value },
+                ) { room ->
+                    CallItem(
+                        room = room,
+                        onClick = { onRoomClick(room.roomId) },
+                    )
+                }
             }
         }
     }
