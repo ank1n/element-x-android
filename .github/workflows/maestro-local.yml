@@ -120,7 +120,7 @@ jobs:
           LOG_FILE=$(find ~/.maestro/tests/ -name maestro.log)
           echo "Log file: $LOG_FILE"
           LOG_LINES="$(tail -n 30 $LOG_FILE)"
-          echo "### Maestro tests failed...
+          echo "### :x: Maestro tests failed...
           
           \`\`\`
           $LOG_LINES
