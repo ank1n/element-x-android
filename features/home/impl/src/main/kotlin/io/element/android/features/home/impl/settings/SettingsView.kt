@@ -28,6 +28,7 @@ import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarData
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
+import io.element.android.libraries.designsystem.components.avatar.AvatarType
 import io.element.android.libraries.designsystem.theme.components.HorizontalDivider
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.Text
@@ -132,8 +133,9 @@ private fun ProfileHeader(
                 id = matrixUser.userId.value,
                 name = matrixUser.displayName,
                 url = matrixUser.avatarUrl,
-                size = AvatarSize.RoomHeader,
+                size = AvatarSize.UserHeader,
             ),
+            avatarType = AvatarType.User,
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(

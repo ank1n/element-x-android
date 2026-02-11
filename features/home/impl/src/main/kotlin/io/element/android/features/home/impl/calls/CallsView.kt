@@ -34,6 +34,7 @@ import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
+import io.element.android.libraries.designsystem.components.avatar.AvatarType
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.matrix.api.core.RoomId
@@ -137,6 +138,7 @@ private fun CallItem(
     ) {
         Avatar(
             avatarData = room.avatarData.copy(size = AvatarSize.UserListItem),
+            avatarType = AvatarType.User,
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -148,7 +150,7 @@ private fun CallItem(
             Text(
                 text = "Active call",
                 style = ElementTheme.typography.fontBodySmRegular,
-                color = ElementTheme.colors.textSuccess,
+                color = ElementTheme.colors.textSuccessPrimary,
             )
         }
         Icon(

@@ -8,6 +8,7 @@
 package io.element.android.features.home.impl.apps
 
 import android.annotation.SuppressLint
+import androidx.compose.material3.ExperimentalMaterial3Api
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -38,6 +39,7 @@ import io.element.android.features.home.impl.components.StalkUnderlineFilter
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarData
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
+import io.element.android.libraries.designsystem.components.avatar.AvatarType
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.IconButton
 import io.element.android.libraries.designsystem.theme.components.Text
@@ -163,6 +165,7 @@ private fun WidgetListItem(
                 name = widget.roomName,
                 size = AvatarSize.UserListItem,
             ),
+            avatarType = AvatarType.Room(),
         )
         Spacer(modifier = Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -186,6 +189,7 @@ private fun WidgetListItem(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WidgetWebView(
     widget: WidgetItem,

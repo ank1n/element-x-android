@@ -42,6 +42,7 @@ import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
+import io.element.android.libraries.designsystem.components.avatar.AvatarType
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.matrix.api.core.RoomId
 import kotlinx.collections.immutable.ImmutableList
@@ -236,6 +237,7 @@ private fun ContactItem(
     ) {
         Avatar(
             avatarData = contact.avatarData.copy(size = AvatarSize.UserListItem),
+            avatarType = AvatarType.User,
         )
         Spacer(modifier = Modifier.width(16.dp))
         Text(

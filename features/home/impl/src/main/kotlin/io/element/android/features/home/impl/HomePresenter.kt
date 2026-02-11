@@ -25,7 +25,7 @@ import io.element.android.features.home.impl.apps.AppsEvent
 import io.element.android.features.home.impl.apps.AppsRepository
 import io.element.android.features.home.impl.apps.AppsState
 import io.element.android.features.home.impl.apps.WidgetItem
-import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toPersistentList
 import io.element.android.features.announcement.api.Announcement
 import io.element.android.features.announcement.api.AnnouncementService
 import io.element.android.features.home.impl.roomlist.RoomListState
@@ -100,7 +100,7 @@ class HomePresenter(
                 appsLoading = true
                 appsError = null
                 appsRepository.getWidgets(category.apiValue)
-                    .onSuccess { appsWidgets = it.toImmutableList() }
+                    .onSuccess { appsWidgets = it.toPersistentList() }
                     .onFailure { appsError = it.message }
                 appsLoading = false
             }

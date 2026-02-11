@@ -9,8 +9,8 @@ package io.element.android.features.home.impl.apps
 
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.Inject
-import io.element.android.libraries.di.AppScope
-import io.element.android.libraries.di.SingleIn
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.SingleIn
 import io.element.android.libraries.network.RetrofitFactory
 import io.element.android.libraries.sessionstorage.api.SessionStore
 import timber.log.Timber
