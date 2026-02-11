@@ -8,6 +8,7 @@
 
 package io.element.android.features.call.impl.ui
 
+import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.libraries.architecture.AsyncData
 
 data class CallScreenState(
@@ -16,5 +17,6 @@ data class CallScreenState(
     val userAgent: String,
     val isCallActive: Boolean,
     val isInWidgetMode: Boolean,
+    val recordingState: RecordingState = RecordingState.Idle,
     val eventSink: (CallScreenEvents) -> Unit,
 )

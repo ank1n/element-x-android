@@ -9,6 +9,7 @@
 package io.element.android.features.call.impl.ui
 
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.libraries.architecture.AsyncData
 
 open class CallScreenStateProvider : PreviewParameterProvider<CallScreenState> {
@@ -27,6 +28,7 @@ internal fun aCallScreenState(
     userAgent: String = "",
     isCallActive: Boolean = true,
     isInWidgetMode: Boolean = false,
+    recordingState: RecordingState = RecordingState.Idle,
     eventSink: (CallScreenEvents) -> Unit = {},
 ): CallScreenState {
     return CallScreenState(
@@ -35,6 +37,7 @@ internal fun aCallScreenState(
         userAgent = userAgent,
         isCallActive = isCallActive,
         isInWidgetMode = isInWidgetMode,
+        recordingState = recordingState,
         eventSink = eventSink,
     )
 }

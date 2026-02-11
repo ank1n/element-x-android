@@ -16,10 +16,20 @@ import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,14 +38,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.call.impl.R
 import io.element.android.features.call.impl.pip.PictureInPictureEvents
 import io.element.android.features.call.impl.pip.PictureInPictureState
 import io.element.android.features.call.impl.pip.aPictureInPictureState
+import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.features.call.impl.utils.InvalidAudioDeviceReason
 import io.element.android.features.call.impl.utils.WebViewAudioManager
 import io.element.android.features.call.impl.utils.WebViewPipController
@@ -97,48 +112,62 @@ internal fun CallScreenView(
                 }
             }
 
-            CallWebView(
-                modifier = Modifier
-                    .padding(padding)
-                    .consumeWindowInsets(padding)
-                    .fillMaxSize(),
-                url = state.urlState,
-                userAgent = state.userAgent,
-                onPermissionsRequest = { request ->
-                    val androidPermissions = mapWebkitPermissions(request.resources)
-                    val callback: RequestPermissionCallback = { request.grant(it) }
-                    requestPermissions(androidPermissions.toTypedArray(), callback)
-                },
-                onConsoleMessage = onConsoleMessage,
-                onCreateWebView = { webView ->
-                    webView.addBackHandler(onBackPressed = ::handleBack)
-                    val interceptor = WebViewWidgetMessageInterceptor(
-                        webView = webView,
-                        onUrlLoaded = { url ->
-                            webView.evaluateJavascript("controls.onBackButtonPressed = () => { backHandler.onBackPressed() }", null)
-                            if (webViewAudioManager?.isInCallMode?.get() == false) {
-                                Timber.d("URL $url is loaded, starting in-call audio mode")
-                                webViewAudioManager?.onCallStarted()
-                            } else {
-                                Timber.d("Can't start in-call audio mode since the app is already in it.")
-                            }
-                        },
-                        onError = { state.eventSink(CallScreenEvents.OnWebViewError(it)) },
+            Box(modifier = Modifier
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .fillMaxSize()
+            ) {
+                CallWebView(
+                    modifier = Modifier.fillMaxSize(),
+                    url = state.urlState,
+                    userAgent = state.userAgent,
+                    onPermissionsRequest = { request ->
+                        val androidPermissions = mapWebkitPermissions(request.resources)
+                        val callback: RequestPermissionCallback = { request.grant(it) }
+                        requestPermissions(androidPermissions.toTypedArray(), callback)
+                    },
+                    onConsoleMessage = onConsoleMessage,
+                    onCreateWebView = { webView ->
+                        webView.addBackHandler(onBackPressed = ::handleBack)
+                        val interceptor = WebViewWidgetMessageInterceptor(
+                            webView = webView,
+                            onUrlLoaded = { url ->
+                                webView.evaluateJavascript("controls.onBackButtonPressed = () => { backHandler.onBackPressed() }", null)
+                                if (webViewAudioManager?.isInCallMode?.get() == false) {
+                                    Timber.d("URL $url is loaded, starting in-call audio mode")
+                                    webViewAudioManager?.onCallStarted()
+                                } else {
+                                    Timber.d("Can't start in-call audio mode since the app is already in it.")
+                                }
+                            },
+                            onError = { state.eventSink(CallScreenEvents.OnWebViewError(it)) },
+                        )
+                        webViewAudioManager = WebViewAudioManager(
+                            webView = webView,
+                            coroutineScope = coroutineScope,
+                            onInvalidAudioDeviceAdded = { invalidAudioDeviceReason = it },
+                        )
+                        state.eventSink(CallScreenEvents.SetupMessageChannels(interceptor))
+                        val pipController = WebViewPipController(webView)
+                        pipState.eventSink(PictureInPictureEvents.SetPipController(pipController))
+                    },
+                    onDestroyWebView = {
+                        // Reset audio mode
+                        webViewAudioManager?.onCallStopped()
+                    }
+                )
+
+                // sTalk: Recording button overlay (top-right)
+                if (state.isCallActive && state.isInWidgetMode) {
+                    RecordButton(
+                        recordingState = state.recordingState,
+                        onClick = { state.eventSink(CallScreenEvents.ToggleRecording) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 48.dp, end = 16.dp),
                     )
-                    webViewAudioManager = WebViewAudioManager(
-                        webView = webView,
-                        coroutineScope = coroutineScope,
-                        onInvalidAudioDeviceAdded = { invalidAudioDeviceReason = it },
-                    )
-                    state.eventSink(CallScreenEvents.SetupMessageChannels(interceptor))
-                    val pipController = WebViewPipController(webView)
-                    pipState.eventSink(PictureInPictureEvents.SetPipController(pipController))
-                },
-                onDestroyWebView = {
-                    // Reset audio mode
-                    webViewAudioManager?.onCallStopped()
                 }
-            )
+            }
             when (state.urlState) {
                 AsyncData.Uninitialized,
                 is AsyncData.Loading ->
@@ -255,6 +284,53 @@ private fun WebView.addBackHandler(onBackPressed: () -> Unit) {
         },
         "backHandler"
     )
+}
+
+@Composable
+private fun RecordButton(
+    recordingState: RecordingState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isRecording = recordingState is RecordingState.Recording
+    val isStarting = recordingState is RecordingState.Starting
+
+    val pulseAlpha = if (isRecording) {
+        val infiniteTransition = rememberInfiniteTransition(label = "recording pulse")
+        val alpha by infiniteTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.3f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 800),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "recording alpha",
+        )
+        alpha
+    } else {
+        1f
+    }
+
+    IconButton(
+        onClick = onClick,
+        enabled = !isStarting,
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = if (isRecording) Color.Red else ElementTheme.colors.bgSubtleSecondary,
+        ),
+        modifier = modifier
+            .size(48.dp)
+            .alpha(pulseAlpha),
+    ) {
+        // Red circle as REC indicator
+        Box(
+            modifier = Modifier
+                .size(if (isRecording) 20.dp else 16.dp)
+                .background(
+                    color = if (isRecording) Color.White else Color.Red,
+                    shape = CircleShape,
+                )
+        )
+    }
 }
 
 @PreviewsDayNight

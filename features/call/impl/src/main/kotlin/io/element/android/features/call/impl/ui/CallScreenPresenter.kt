@@ -25,6 +25,8 @@ import im.vector.app.features.analytics.plan.MobileScreen
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.call.api.CallType
 import io.element.android.features.call.impl.data.WidgetMessage
+import io.element.android.features.call.impl.recording.RecordingRepository
+import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.features.call.impl.utils.ActiveCallManager
 import io.element.android.features.call.impl.utils.CallWidgetProvider
 import io.element.android.features.call.impl.utils.WidgetMessageInterceptor
@@ -66,6 +68,7 @@ class CallScreenPresenter(
     @AppCoroutineScope
     private val appCoroutineScope: CoroutineScope,
     private val widgetMessageSerializer: WidgetMessageSerializer,
+    private val recordingRepository: RecordingRepository,
 ) : Presenter<CallScreenState> {
     @AssistedFactory
     interface Factory {
@@ -84,6 +87,7 @@ class CallScreenPresenter(
         var isWidgetLoaded by rememberSaveable { mutableStateOf(false) }
         var ignoreWebViewError by rememberSaveable { mutableStateOf(false) }
         var webViewError by remember { mutableStateOf<String?>(null) }
+        var recordingState by remember { mutableStateOf<RecordingState>(RecordingState.Idle) }
         val languageTag = languageTagProvider.provideLanguageTag()
         val theme = if (ElementTheme.isLightTheme) "light" else "dark"
 
@@ -196,6 +200,14 @@ class CallScreenPresenter(
                     }
                     // Else ignore the error, give a chance the Element Call to recover by itself.
                 }
+                is CallScreenEvents.ToggleRecording -> {
+                    coroutineScope.launch(dispatchers.io) {
+                        toggleRecording(
+                            currentState = recordingState,
+                            onStateChange = { recordingState = it },
+                        )
+                    }
+                }
             }
         }
 
@@ -205,6 +217,7 @@ class CallScreenPresenter(
             userAgent = userAgent,
             isCallActive = isWidgetLoaded,
             isInWidgetMode = isInWidgetMode,
+            recordingState = recordingState,
             eventSink = ::handleEvent,
         )
     }
@@ -275,6 +288,57 @@ class CallScreenPresenter(
             data = null,
         )
         messageInterceptor.sendMessage(widgetMessageSerializer.serialize(message))
+    }
+
+    private suspend fun toggleRecording(
+        currentState: RecordingState,
+        onStateChange: (RecordingState) -> Unit,
+    ) {
+        val roomCall = callType as? CallType.RoomCall ?: return
+        when (currentState) {
+            is RecordingState.Idle, is RecordingState.Error -> {
+                onStateChange(RecordingState.Starting)
+                val result = recordingRepository.startRecording(
+                    sessionId = roomCall.sessionId.value,
+                    roomId = roomCall.roomId.value,
+                    livekitRoomName = "livekit_${roomCall.roomId.value}",
+                )
+                result.fold(
+                    onSuccess = { response ->
+                        onStateChange(
+                            RecordingState.Recording(
+                                recordingId = response.recordingId,
+                                startedAtMillis = clock.epochMillis(),
+                            )
+                        )
+                        Timber.d("Recording started: ${response.recordingId}")
+                    },
+                    onFailure = { error ->
+                        Timber.e(error, "Failed to start recording")
+                        onStateChange(RecordingState.Error(error.message ?: "Failed to start recording"))
+                    },
+                )
+            }
+            is RecordingState.Recording -> {
+                val result = recordingRepository.stopRecording(
+                    sessionId = roomCall.sessionId.value,
+                    recordingId = currentState.recordingId,
+                )
+                result.fold(
+                    onSuccess = { response ->
+                        Timber.d("Recording stopped: ${response.recordingId}, duration: ${response.durationSeconds}s")
+                        onStateChange(RecordingState.Idle)
+                    },
+                    onFailure = { error ->
+                        Timber.e(error, "Failed to stop recording")
+                        onStateChange(RecordingState.Error(error.message ?: "Failed to stop recording"))
+                    },
+                )
+            }
+            is RecordingState.Starting -> {
+                // Ignore toggle while starting
+            }
+        }
     }
 
     private fun CoroutineScope.close(widgetDriver: MatrixWidgetDriver?, navigator: CallScreenNavigator) = launch(dispatchers.io) {

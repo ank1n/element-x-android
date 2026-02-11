@@ -14,6 +14,10 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import im.vector.app.features.analytics.plan.MobileScreen
 import io.element.android.features.call.api.CallType
+import io.element.android.features.call.impl.recording.RecordingRepository
+import io.element.android.features.call.impl.recording.RecordingsListResponse
+import io.element.android.features.call.impl.recording.StartRecordingResponse
+import io.element.android.features.call.impl.recording.StopRecordingResponse
 import io.element.android.features.call.impl.ui.CallScreenEvents
 import io.element.android.features.call.impl.ui.CallScreenNavigator
 import io.element.android.features.call.impl.ui.CallScreenPresenter
@@ -414,6 +418,31 @@ class CallScreenPresenterTest {
             appForegroundStateService = appForegroundStateService,
             appCoroutineScope = backgroundScope,
             widgetMessageSerializer = WidgetMessageSerializer(DefaultJsonProvider()),
+            recordingRepository = FakeRecordingRepository(),
         )
     }
+}
+
+private class FakeRecordingRepository : RecordingRepository {
+    override suspend fun startRecording(
+        sessionId: String,
+        roomId: String,
+        livekitRoomName: String,
+    ): Result<StartRecordingResponse> = Result.success(
+        StartRecordingResponse(recordingId = "rec_test", status = "started")
+    )
+
+    override suspend fun stopRecording(
+        sessionId: String,
+        recordingId: String,
+    ): Result<StopRecordingResponse> = Result.success(
+        StopRecordingResponse(recordingId = recordingId, status = "stopped", durationSeconds = 60)
+    )
+
+    override suspend fun getRecordings(
+        sessionId: String,
+        roomId: String,
+    ): Result<RecordingsListResponse> = Result.success(
+        RecordingsListResponse(recordings = emptyList())
+    )
 }
