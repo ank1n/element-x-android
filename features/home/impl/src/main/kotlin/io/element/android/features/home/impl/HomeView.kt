@@ -47,6 +47,7 @@ import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.home.impl.apps.AppsView
 import io.element.android.features.home.impl.calls.CallsView
 import io.element.android.features.home.impl.contacts.ContactsView
+import io.element.android.features.home.impl.settings.SettingsView
 import io.element.android.features.home.impl.components.HomeTopBar
 import io.element.android.features.home.impl.components.RoomListContentView
 import io.element.android.features.home.impl.components.RoomListMenuAction
@@ -64,6 +65,9 @@ import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.FloatingActionButton
 import io.element.android.libraries.designsystem.theme.components.Icon
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.libraries.designsystem.theme.components.NavigationBar
 import io.element.android.libraries.designsystem.theme.components.NavigationBarIcon
 import io.element.android.libraries.designsystem.theme.components.NavigationBarItem
@@ -205,8 +209,16 @@ private fun HomeScaffold(
         bottomBar = {
             if (state.showNavigationBar) {
                 val coroutineScope = rememberCoroutineScope()
+                val unreadCount = remember(roomListState.contentState) {
+                    when (val content = roomListState.contentState) {
+                        is RoomListContentState.Rooms -> content.summaries
+                            .sumOf { it.numberOfUnreadMessages }
+                        else -> 0L
+                    }
+                }
                 HomeBottomBar(
                     currentHomeNavigationBarItem = state.currentHomeNavigationBarItem,
+                    unreadCount = unreadCount,
                     onItemClick = { item ->
                         // scroll to top if selecting the same item
                         if (item == state.currentHomeNavigationBarItem) {
@@ -301,8 +313,12 @@ private fun HomeScaffold(
                     )
                 }
                 HomeNavigationBarItem.Settings -> {
-                    StalkPlaceholderView(
-                        title = stringResource(R.string.screen_home_tab_settings),
+                    SettingsView(
+                        matrixUser = state.currentUserAndNeighbors.firstOrNull()
+                            ?: io.element.android.libraries.matrix.api.user.MatrixUser(
+                                userId = io.element.android.libraries.matrix.api.core.UserId("@unknown:server")
+                            ),
+                        onOpenSettings = onOpenSettings,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
@@ -331,6 +347,7 @@ private fun HomeScaffold(
 @Composable
 private fun HomeBottomBar(
     currentHomeNavigationBarItem: HomeNavigationBarItem,
+    unreadCount: Long,
     onItemClick: (HomeNavigationBarItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -346,9 +363,25 @@ private fun HomeBottomBar(
                     onItemClick(item)
                 },
                 icon = {
-                    NavigationBarIcon(
-                        imageVector = item.icon(isSelected),
-                    )
+                    if (item == HomeNavigationBarItem.Chats && unreadCount > 0) {
+                        BadgedBox(
+                            badge = {
+                                Badge {
+                                    androidx.compose.material3.Text(
+                                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                    )
+                                }
+                            }
+                        ) {
+                            NavigationBarIcon(
+                                imageVector = item.icon(isSelected),
+                            )
+                        }
+                    } else {
+                        NavigationBarIcon(
+                            imageVector = item.icon(isSelected),
+                        )
+                    }
                 },
                 label = {
                     NavigationBarText(
@@ -361,20 +394,6 @@ private fun HomeBottomBar(
 }
 
 internal fun RoomListRoomSummary.contentType() = displayType.ordinal
-
-@Composable
-private fun StalkPlaceholderView(
-    title: String,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        NavigationBarText(text = title)
-    }
-}
 
 @PreviewsDayNight
 @Composable
