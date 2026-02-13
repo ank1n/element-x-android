@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
-import io.element.android.appconfig.OnBoardingConfig
 import io.element.android.features.enterprise.api.EnterpriseService
 import io.element.android.features.enterprise.api.canConnectToAnyHomeserver
 import io.element.android.features.login.impl.accesscontrol.DefaultAccountProviderAccessControl
@@ -86,9 +85,7 @@ class OnBoardingPresenter(
             // Else use the account provider passed in the params if any and if allowed
             forcedAccountProvider ?: linkAccountProvider
         }
-        val canLoginWithQrCode by produceState(initialValue = false, linkAccountProvider) {
-            value = linkAccountProvider == null
-        }
+        val canLoginWithQrCode = false
         val canReportBug by remember { rageshakeFeatureAvailability.isAvailable() }.collectAsState(false)
         var showReportBug by rememberSaveable { mutableStateOf(false) }
         val onBoardingLogoResId = remember {
@@ -114,6 +111,11 @@ class OnBoardingPresenter(
                         loginHint = params.loginHint?.takeIf { forcedAccountProvider == null },
                     )
                 }
+                is OnBoardingEvents.OnNativeLogin -> localCoroutineScope.launch {
+                    val homeserver = defaultAccountProvider ?: return@launch
+                    accountProviderDataSource.setUrl(homeserver)
+                    loginHelper.nativeOidcLogin(homeserver, event.username, event.password)
+                }
                 OnBoardingEvents.ClearError -> loginHelper.clearError()
                 OnBoardingEvents.OnVersionClick -> {
                     if (canReportBug) {
@@ -131,7 +133,7 @@ class OnBoardingPresenter(
             defaultAccountProvider = defaultAccountProvider,
             mustChooseAccountProvider = mustChooseAccountProvider,
             canLoginWithQrCode = canLoginWithQrCode,
-            canCreateAccount = defaultAccountProvider == null && canConnectToAnyHomeserver && OnBoardingConfig.CAN_CREATE_ACCOUNT,
+            canCreateAccount = false,
             canReportBug = canReportBug && showReportBug,
             loginMode = loginMode,
             version = buildMeta.versionName,

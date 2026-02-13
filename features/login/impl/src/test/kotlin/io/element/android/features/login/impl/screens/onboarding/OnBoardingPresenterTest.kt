@@ -298,4 +298,5 @@ fun createLoginHelper(
     oidcActionFlow = oidcActionFlow,
     authenticationService = authenticationService,
     webClientUrlForAuthenticationRetriever = webClientUrlForAuthenticationRetriever,
+    keycloakDirectLoginService = io.element.android.features.login.impl.login.KeycloakDirectLoginService(),
 )
