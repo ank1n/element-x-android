@@ -36,6 +36,8 @@ import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.architecture.runCatchingUpdatingState
 import io.element.android.libraries.core.coroutine.CoroutineDispatchers
+import io.element.android.libraries.designsystem.components.avatar.AvatarData
+import io.element.android.libraries.designsystem.components.avatar.AvatarSize
 import io.element.android.libraries.di.annotations.AppCoroutineScope
 import io.element.android.libraries.matrix.api.MatrixClientProvider
 import io.element.android.libraries.matrix.api.sync.SyncState
@@ -93,8 +95,12 @@ class CallScreenPresenter(
         var isMuted by remember { mutableStateOf(false) }
         var isVideoEnabled by remember { mutableStateOf(true) }
         var isSpeakerOn by remember { mutableStateOf(true) }
+        var isHandRaised by remember { mutableStateOf(false) }
         var callDurationSeconds by remember { mutableStateOf(0L) }
         var callStartTimeMillis by remember { mutableStateOf(0L) }
+        var participantName by remember { mutableStateOf("") }
+        var avatarData by remember { mutableStateOf<AvatarData?>(null) }
+        var isDm by remember { mutableStateOf(false) }
         val languageTag = languageTagProvider.provideLanguageTag()
         val theme = if (ElementTheme.isLightTheme) "light" else "dark"
 
@@ -112,6 +118,37 @@ class CallScreenPresenter(
             }
             onDispose {
                 appCoroutineScope.launch { activeCallManager.hungUpCall(callType) }
+            }
+        }
+
+        // sTalk: Load room info (name + avatar) for call overlay
+        LaunchedEffect(callType) {
+            if (callType is CallType.RoomCall) {
+                val client = matrixClientsProvider.getOrNull(callType.sessionId)
+                if (client != null) {
+                    client.getRoomInfoFlow(callType.roomId).collect { optional ->
+                        val roomInfo = optional.orElse(null) ?: return@collect
+                        isDm = roomInfo.isDirect
+                        if (roomInfo.isDirect && roomInfo.heroes.isNotEmpty()) {
+                            val hero = roomInfo.heroes.first()
+                            participantName = hero.displayName ?: hero.userId.value
+                            avatarData = AvatarData(
+                                id = hero.userId.value,
+                                name = hero.displayName,
+                                url = hero.avatarUrl,
+                                size = AvatarSize.IncomingCall,
+                            )
+                        } else {
+                            participantName = roomInfo.name ?: ""
+                            avatarData = AvatarData(
+                                id = roomInfo.id.value,
+                                name = roomInfo.name,
+                                url = roomInfo.avatarUrl,
+                                size = AvatarSize.IncomingCall,
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -273,6 +310,16 @@ class CallScreenPresenter(
                 is CallScreenEvents.OnVideoStateChanged -> {
                     isVideoEnabled = event.isVideoEnabled
                 }
+                is CallScreenEvents.ToggleHandRaise -> {
+                    val interceptor = messageInterceptor.value
+                    if (interceptor is WebViewWidgetMessageInterceptor) {
+                        interceptor.toggleHandRaiseInWebView()
+                    }
+                    isHandRaised = !isHandRaised
+                }
+                is CallScreenEvents.OnHandRaiseStateChanged -> {
+                    isHandRaised = event.isHandRaised
+                }
             }
         }
 
@@ -286,6 +333,10 @@ class CallScreenPresenter(
             isMuted = isMuted,
             isVideoEnabled = isVideoEnabled,
             isSpeakerOn = isSpeakerOn,
+            isHandRaised = isHandRaised,
+            participantName = participantName,
+            avatarData = avatarData,
+            isDm = isDm,
             callDurationSeconds = callDurationSeconds,
             eventSink = ::handleEvent,
         )

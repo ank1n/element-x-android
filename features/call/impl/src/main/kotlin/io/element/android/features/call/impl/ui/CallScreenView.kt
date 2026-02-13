@@ -122,6 +122,9 @@ internal fun CallScreenView(
                             onVideoChanged = { isVideoEnabled ->
                                 state.eventSink(CallScreenEvents.OnVideoStateChanged(isVideoEnabled))
                             },
+                            onHandRaiseChanged = { isHandRaised ->
+                                state.eventSink(CallScreenEvents.OnHandRaiseStateChanged(isHandRaised))
+                            },
                         )
                         var interceptorRef: WebViewWidgetMessageInterceptor? = null
                         val interceptor = WebViewWidgetMessageInterceptor(
@@ -273,6 +276,7 @@ private fun WebView.setup(
 private fun WebView.addCallControlsInterface(
     onMuteChanged: (Boolean) -> Unit,
     onVideoChanged: (Boolean) -> Unit,
+    onHandRaiseChanged: (Boolean) -> Unit,
 ) {
     addJavascriptInterface(
         object {
@@ -283,6 +287,10 @@ private fun WebView.addCallControlsInterface(
             @Suppress("unused")
             @JavascriptInterface
             fun onVideoChanged(isVideoEnabled: Boolean) = onVideoChanged(isVideoEnabled)
+
+            @Suppress("unused")
+            @JavascriptInterface
+            fun onHandRaiseChanged(isHandRaised: Boolean) = onHandRaiseChanged(isHandRaised)
         },
         "stalkCallControls"
     )

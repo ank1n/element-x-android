@@ -42,6 +42,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.call.impl.recording.RecordingState
+import io.element.android.libraries.designsystem.components.avatar.Avatar
+import io.element.android.libraries.designsystem.components.avatar.AvatarData
+import io.element.android.libraries.designsystem.components.avatar.AvatarType
 
 // sTalk: Native Compose overlay for Telegram-style call controls
 @Composable
@@ -54,6 +57,9 @@ internal fun CallControlsOverlay(
         TopCallInfo(
             participantName = state.participantName,
             callDurationSeconds = state.callDurationSeconds,
+            avatarData = state.avatarData,
+            isDm = state.isDm,
+            isVideoEnabled = state.isVideoEnabled,
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
@@ -62,10 +68,12 @@ internal fun CallControlsOverlay(
             isMuted = state.isMuted,
             isVideoEnabled = state.isVideoEnabled,
             isSpeakerOn = state.isSpeakerOn,
+            isHandRaised = state.isHandRaised,
             recordingState = state.recordingState,
             onToggleMute = { state.eventSink(CallScreenEvents.ToggleMute) },
             onToggleVideo = { state.eventSink(CallScreenEvents.ToggleVideo) },
             onToggleSpeaker = { state.eventSink(CallScreenEvents.ToggleSpeaker) },
+            onToggleHandRaise = { state.eventSink(CallScreenEvents.ToggleHandRaise) },
             onToggleRecording = { state.eventSink(CallScreenEvents.ToggleRecording) },
             onHangup = { state.eventSink(CallScreenEvents.Hangup) },
             modifier = Modifier.align(Alignment.BottomCenter),
@@ -77,6 +85,9 @@ internal fun CallControlsOverlay(
 private fun TopCallInfo(
     participantName: String,
     callDurationSeconds: Long,
+    avatarData: AvatarData?,
+    isDm: Boolean,
+    isVideoEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -96,6 +107,16 @@ private fun TopCallInfo(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Show avatar when video is off
+            if (!isVideoEnabled && avatarData != null) {
+                Avatar(
+                    avatarData = avatarData,
+                    avatarType = if (isDm) AvatarType.User else AvatarType.Room(),
+                    modifier = Modifier.size(120.dp),
+                    forcedAvatarSize = 120.dp,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
             if (participantName.isNotEmpty()) {
                 Text(
                     text = participantName,
@@ -121,10 +142,12 @@ private fun BottomCallControls(
     isMuted: Boolean,
     isVideoEnabled: Boolean,
     isSpeakerOn: Boolean,
+    isHandRaised: Boolean,
     recordingState: RecordingState,
     onToggleMute: () -> Unit,
     onToggleVideo: () -> Unit,
     onToggleSpeaker: () -> Unit,
+    onToggleHandRaise: () -> Unit,
     onToggleRecording: () -> Unit,
     onHangup: () -> Unit,
     modifier: Modifier = Modifier,
@@ -184,6 +207,14 @@ private fun BottomCallControls(
                     contentDescription = if (isVideoEnabled) "Video off" else "Video on",
                     isActive = !isVideoEnabled,
                     onClick = onToggleVideo,
+                )
+
+                // Hand raise button
+                CallControlButton(
+                    icon = CompoundIcons.RaisedHandSolid(),
+                    contentDescription = if (isHandRaised) "Lower hand" else "Raise hand",
+                    isActive = isHandRaised,
+                    onClick = onToggleHandRaise,
                 )
 
                 // End call button (red)

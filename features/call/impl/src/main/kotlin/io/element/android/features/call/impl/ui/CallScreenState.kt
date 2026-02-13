@@ -10,6 +10,7 @@ package io.element.android.features.call.impl.ui
 
 import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.libraries.architecture.AsyncData
+import io.element.android.libraries.designsystem.components.avatar.AvatarData
 
 data class CallScreenState(
     val urlState: AsyncData<String>,
@@ -22,7 +23,10 @@ data class CallScreenState(
     val isMuted: Boolean = false,
     val isVideoEnabled: Boolean = true,
     val isSpeakerOn: Boolean = true,
+    val isHandRaised: Boolean = false,
     val participantName: String = "",
+    val avatarData: AvatarData? = null,
+    val isDm: Boolean = false,
     val callDurationSeconds: Long = 0L,
     val eventSink: (CallScreenEvents) -> Unit,
 )

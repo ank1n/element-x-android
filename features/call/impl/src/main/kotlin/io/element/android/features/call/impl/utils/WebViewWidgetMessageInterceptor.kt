@@ -174,7 +174,8 @@ class WebViewWidgetMessageInterceptor(
         json?.let { interceptedMessages.tryEmit(it) }
     }
 
-    // sTalk: Inject CSS to hide Element Call UI and make video full-screen (Telegram-style)
+    // sTalk: Inject CSS to hide Element Call UI controls (Telegram-style overlay)
+    // Hides UI chrome (headers, footers, controls, lobby) but preserves video grid for group calls
     private fun injectCallOverlayCSS(view: WebView) {
         view.evaluateJavascript(
             """
@@ -183,6 +184,7 @@ class WebViewWidgetMessageInterceptor(
                 if (document.getElementById(styleId)) return;
 
                 var css = '' +
+                    /* Hide UI chrome elements */
                     '[class*="_header_"], [class*="_Header_"] { display: none !important; }' +
                     '[class*="_footer_"], [class*="_Footer_"] { display: none !important; }' +
                     '[class*="_toolbar_"], [class*="_Toolbar_"] { display: none !important; }' +
@@ -194,10 +196,18 @@ class WebViewWidgetMessageInterceptor(
                     '[class*="_hangup_"], [class*="_Hangup_"] { display: none !important; }' +
                     '[class*="_button-row"], [class*="_ButtonRow"] { display: none !important; }' +
                     'header, footer, nav { display: none !important; }' +
+                    /* Body background */
                     'body { background: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }' +
-                    'video { object-fit: cover !important; width: 100% !important; height: 100% !important; }' +
-                    '[class*="_avatar_"], [class*="_Avatar_"] { display: none !important; }' +
-                    '[class*="_no-video"], [class*="_noVideo"] { background: #000 !important; }';
+                    /* Video tiles: cover fit, let grid handle sizing */
+                    'video { object-fit: cover !important; }' +
+                    /* Hide participant name overlays inside video tiles */
+                    '.lk-participant-name, [class*="_displayName"], [class*="_participant-name"] { display: none !important; }' +
+                    /* No-video placeholders */
+                    '[class*="_no-video"], [class*="_noVideo"] { background: #000 !important; }' +
+                    /* Grid layouts: fill available space */
+                    '.lk-grid-layout, .lk-focus-layout { width: 100% !important; height: 100% !important; }' +
+                    /* Participant tiles in grid: remove padding/margins for clean tiling */
+                    '.lk-participant-tile { border-radius: 8px !important; overflow: hidden !important; }';
 
                 var style = document.createElement('style');
                 style.id = styleId;
@@ -262,6 +272,7 @@ class WebViewWidgetMessageInterceptor(
                 // Poll for control state changes and report to native
                 var lastMuteState = null;
                 var lastVideoState = null;
+                var lastHandRaiseState = null;
                 setInterval(function() {
                     try {
                         // Check mute buttons
@@ -271,6 +282,9 @@ class WebViewWidgetMessageInterceptor(
                         var videoBtn = document.querySelector('[class*="_video"], [aria-label*="Video"], [aria-label*="camera"], [data-testid*="video"]');
                         var isVideoOff = videoBtn ? (videoBtn.getAttribute('aria-pressed') === 'true' || videoBtn.classList.toString().indexOf('active') >= 0) : false;
 
+                        var handBtn = document.querySelector('[aria-label*="Hand"], [aria-label*="hand"], [data-testid*="hand"], [class*="_hand"], [class*="Hand"]');
+                        var isHandRaised = handBtn ? (handBtn.getAttribute('aria-pressed') === 'true' || handBtn.classList.toString().indexOf('active') >= 0) : false;
+
                         if (isMuted !== lastMuteState) {
                             lastMuteState = isMuted;
                             if (window.stalkCallControls) window.stalkCallControls.onMuteChanged(isMuted);
@@ -278,6 +292,10 @@ class WebViewWidgetMessageInterceptor(
                         if (isVideoOff !== lastVideoState) {
                             lastVideoState = isVideoOff;
                             if (window.stalkCallControls) window.stalkCallControls.onVideoChanged(!isVideoOff);
+                        }
+                        if (isHandRaised !== lastHandRaiseState) {
+                            lastHandRaiseState = isHandRaised;
+                            if (window.stalkCallControls) window.stalkCallControls.onHandRaiseChanged(isHandRaised);
                         }
                     } catch(e) {}
                 }, 500);
@@ -306,6 +324,19 @@ class WebViewWidgetMessageInterceptor(
             """
             (function() {
                 var btn = document.querySelector('[class*="_video"], [aria-label*="Video"], [aria-label*="camera"], [data-testid*="video"]');
+                if (btn) btn.click();
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    // sTalk: Toggle hand raise in the WebView
+    fun toggleHandRaiseInWebView() {
+        webView.evaluateJavascript(
+            """
+            (function() {
+                var btn = document.querySelector('[aria-label*="Hand"], [aria-label*="hand"], [data-testid*="hand"], [class*="_hand"], [class*="Hand"]');
                 if (btn) btn.click();
             })();
             """.trimIndent(),
