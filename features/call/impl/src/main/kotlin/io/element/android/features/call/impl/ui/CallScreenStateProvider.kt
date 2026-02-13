@@ -29,6 +29,11 @@ internal fun aCallScreenState(
     isCallActive: Boolean = true,
     isInWidgetMode: Boolean = false,
     recordingState: RecordingState = RecordingState.Idle,
+    isMuted: Boolean = false,
+    isVideoEnabled: Boolean = true,
+    isSpeakerOn: Boolean = true,
+    participantName: String = "",
+    callDurationSeconds: Long = 0L,
     eventSink: (CallScreenEvents) -> Unit = {},
 ): CallScreenState {
     return CallScreenState(
@@ -38,6 +43,11 @@ internal fun aCallScreenState(
         isCallActive = isCallActive,
         isInWidgetMode = isInWidgetMode,
         recordingState = recordingState,
+        isMuted = isMuted,
+        isVideoEnabled = isVideoEnabled,
+        isSpeakerOn = isSpeakerOn,
+        participantName = participantName,
+        callDurationSeconds = callDurationSeconds,
         eventSink = eventSink,
     )
 }

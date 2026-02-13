@@ -18,5 +18,11 @@ data class CallScreenState(
     val isCallActive: Boolean,
     val isInWidgetMode: Boolean,
     val recordingState: RecordingState = RecordingState.Idle,
+    // sTalk: Native call controls state
+    val isMuted: Boolean = false,
+    val isVideoEnabled: Boolean = true,
+    val isSpeakerOn: Boolean = true,
+    val participantName: String = "",
+    val callDurationSeconds: Long = 0L,
     val eventSink: (CallScreenEvents) -> Unit,
 )

@@ -29,6 +29,7 @@ import io.element.android.features.call.impl.recording.RecordingRepository
 import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.features.call.impl.utils.ActiveCallManager
 import io.element.android.features.call.impl.utils.CallWidgetProvider
+import io.element.android.features.call.impl.utils.WebViewWidgetMessageInterceptor
 import io.element.android.features.call.impl.utils.WidgetMessageInterceptor
 import io.element.android.features.call.impl.utils.WidgetMessageSerializer
 import io.element.android.libraries.architecture.AsyncData
@@ -88,6 +89,12 @@ class CallScreenPresenter(
         var ignoreWebViewError by rememberSaveable { mutableStateOf(false) }
         var webViewError by remember { mutableStateOf<String?>(null) }
         var recordingState by remember { mutableStateOf<RecordingState>(RecordingState.Idle) }
+        // sTalk: Native call controls state
+        var isMuted by remember { mutableStateOf(false) }
+        var isVideoEnabled by remember { mutableStateOf(true) }
+        var isSpeakerOn by remember { mutableStateOf(true) }
+        var callDurationSeconds by remember { mutableStateOf(0L) }
+        var callStartTimeMillis by remember { mutableStateOf(0L) }
         val languageTag = languageTagProvider.provideLanguageTag()
         val theme = if (ElementTheme.isLightTheme) "light" else "dark"
 
@@ -114,6 +121,39 @@ class CallScreenPresenter(
             }
             is CallType.RoomCall -> {
                 screenTracker.TrackScreen(screen = MobileScreen.ScreenName.RoomCall)
+            }
+        }
+
+        // sTalk: Call duration timer
+        LaunchedEffect(isWidgetLoaded) {
+            if (isWidgetLoaded) {
+                callStartTimeMillis = clock.epochMillis()
+                while (true) {
+                    delay(1.seconds)
+                    callDurationSeconds = (clock.epochMillis() - callStartTimeMillis) / 1000
+                }
+            }
+        }
+
+        // sTalk: Check for active recording when call starts
+        LaunchedEffect(isWidgetLoaded) {
+            if (isWidgetLoaded && callType is CallType.RoomCall) {
+                launch(dispatchers.io) {
+                    recordingRepository.getActiveRecording(
+                        sessionId = callType.sessionId.value,
+                        roomId = callType.roomId.value,
+                    ).onSuccess { response ->
+                        if (response.active && response.recordingId != null) {
+                            recordingState = RecordingState.Recording(
+                                recordingId = response.recordingId,
+                                startedAtMillis = clock.epochMillis(),
+                            )
+                            Timber.d("Restored active recording: ${response.recordingId}")
+                        }
+                    }.onFailure { error ->
+                        Timber.w(error, "Failed to check active recording (non-fatal)")
+                    }
+                }
             }
         }
 
@@ -208,6 +248,31 @@ class CallScreenPresenter(
                         )
                     }
                 }
+                // sTalk: Native call control events
+                is CallScreenEvents.ToggleMute -> {
+                    val interceptor = messageInterceptor.value
+                    if (interceptor is WebViewWidgetMessageInterceptor) {
+                        interceptor.toggleMuteInWebView()
+                    }
+                    isMuted = !isMuted
+                }
+                is CallScreenEvents.ToggleVideo -> {
+                    val interceptor = messageInterceptor.value
+                    if (interceptor is WebViewWidgetMessageInterceptor) {
+                        interceptor.toggleVideoInWebView()
+                    }
+                    isVideoEnabled = !isVideoEnabled
+                }
+                is CallScreenEvents.ToggleSpeaker -> {
+                    isSpeakerOn = !isSpeakerOn
+                    // Speaker toggle is handled natively via WebViewAudioManager
+                }
+                is CallScreenEvents.OnMuteStateChanged -> {
+                    isMuted = event.isMuted
+                }
+                is CallScreenEvents.OnVideoStateChanged -> {
+                    isVideoEnabled = event.isVideoEnabled
+                }
             }
         }
 
@@ -218,6 +283,10 @@ class CallScreenPresenter(
             isCallActive = isWidgetLoaded,
             isInWidgetMode = isInWidgetMode,
             recordingState = recordingState,
+            isMuted = isMuted,
+            isVideoEnabled = isVideoEnabled,
+            isSpeakerOn = isSpeakerOn,
+            callDurationSeconds = callDurationSeconds,
             eventSink = ::handleEvent,
         )
     }

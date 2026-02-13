@@ -16,20 +16,10 @@ import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,19 +28,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.call.impl.R
 import io.element.android.features.call.impl.pip.PictureInPictureEvents
 import io.element.android.features.call.impl.pip.PictureInPictureState
 import io.element.android.features.call.impl.pip.aPictureInPictureState
-import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.features.call.impl.utils.InvalidAudioDeviceReason
 import io.element.android.features.call.impl.utils.WebViewAudioManager
 import io.element.android.features.call.impl.utils.WebViewPipController
@@ -129,10 +114,22 @@ internal fun CallScreenView(
                     onConsoleMessage = onConsoleMessage,
                     onCreateWebView = { webView ->
                         webView.addBackHandler(onBackPressed = ::handleBack)
+                        // sTalk: Add JS interface for native call controls state sync
+                        webView.addCallControlsInterface(
+                            onMuteChanged = { isMuted ->
+                                state.eventSink(CallScreenEvents.OnMuteStateChanged(isMuted))
+                            },
+                            onVideoChanged = { isVideoEnabled ->
+                                state.eventSink(CallScreenEvents.OnVideoStateChanged(isVideoEnabled))
+                            },
+                        )
+                        var interceptorRef: WebViewWidgetMessageInterceptor? = null
                         val interceptor = WebViewWidgetMessageInterceptor(
                             webView = webView,
                             onUrlLoaded = { url ->
                                 webView.evaluateJavascript("controls.onBackButtonPressed = () => { backHandler.onBackPressed() }", null)
+                                // sTalk: Inject controls bridge for state sync
+                                interceptorRef?.injectControlsBridge(webView)
                                 if (webViewAudioManager?.isInCallMode?.get() == false) {
                                     Timber.d("URL $url is loaded, starting in-call audio mode")
                                     webViewAudioManager?.onCallStarted()
@@ -142,6 +139,7 @@ internal fun CallScreenView(
                             },
                             onError = { state.eventSink(CallScreenEvents.OnWebViewError(it)) },
                         )
+                        interceptorRef = interceptor
                         webViewAudioManager = WebViewAudioManager(
                             webView = webView,
                             coroutineScope = coroutineScope,
@@ -157,14 +155,10 @@ internal fun CallScreenView(
                     }
                 )
 
-                // sTalk: Recording button overlay (top-right)
+                // sTalk: Native call controls overlay (Telegram-style)
                 if (state.isCallActive && state.isInWidgetMode) {
-                    RecordButton(
-                        recordingState = state.recordingState,
-                        onClick = { state.eventSink(CallScreenEvents.ToggleRecording) },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 48.dp, end = 16.dp),
+                    CallControlsOverlay(
+                        state = state,
                     )
                 }
             }
@@ -275,6 +269,25 @@ private fun WebView.setup(
     }
 }
 
+// sTalk: Add JS interface for native call controls state sync from WebView
+private fun WebView.addCallControlsInterface(
+    onMuteChanged: (Boolean) -> Unit,
+    onVideoChanged: (Boolean) -> Unit,
+) {
+    addJavascriptInterface(
+        object {
+            @Suppress("unused")
+            @JavascriptInterface
+            fun onMuteChanged(isMuted: Boolean) = onMuteChanged(isMuted)
+
+            @Suppress("unused")
+            @JavascriptInterface
+            fun onVideoChanged(isVideoEnabled: Boolean) = onVideoChanged(isVideoEnabled)
+        },
+        "stalkCallControls"
+    )
+}
+
 private fun WebView.addBackHandler(onBackPressed: () -> Unit) {
     addJavascriptInterface(
         object {
@@ -284,53 +297,6 @@ private fun WebView.addBackHandler(onBackPressed: () -> Unit) {
         },
         "backHandler"
     )
-}
-
-@Composable
-private fun RecordButton(
-    recordingState: RecordingState,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val isRecording = recordingState is RecordingState.Recording
-    val isStarting = recordingState is RecordingState.Starting
-
-    val pulseAlpha = if (isRecording) {
-        val infiniteTransition = rememberInfiniteTransition(label = "recording pulse")
-        val alpha by infiniteTransition.animateFloat(
-            initialValue = 1f,
-            targetValue = 0.3f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 800),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "recording alpha",
-        )
-        alpha
-    } else {
-        1f
-    }
-
-    IconButton(
-        onClick = onClick,
-        enabled = !isStarting,
-        colors = IconButtonDefaults.iconButtonColors(
-            containerColor = if (isRecording) Color.Red else ElementTheme.colors.bgSubtleSecondary,
-        ),
-        modifier = modifier
-            .size(48.dp)
-            .alpha(pulseAlpha),
-    ) {
-        // Red circle as REC indicator
-        Box(
-            modifier = Modifier
-                .size(if (isRecording) 20.dp else 16.dp)
-                .background(
-                    color = if (isRecording) Color.White else Color.Red,
-                    shape = CircleShape,
-                )
-        )
-    }
 }
 
 @PreviewsDayNight

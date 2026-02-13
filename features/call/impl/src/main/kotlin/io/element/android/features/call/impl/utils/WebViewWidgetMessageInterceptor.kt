@@ -93,6 +93,8 @@ class WebViewWidgetMessageInterceptor(
             }
 
             override fun onPageFinished(view: WebView, url: String) {
+                // sTalk: Inject CSS to hide Element Call native UI and make video full-screen
+                injectCallOverlayCSS(view)
                 onUrlLoaded(url)
             }
 
@@ -170,5 +172,157 @@ class WebViewWidgetMessageInterceptor(
     private fun onMessageReceived(json: String?) {
         // Here is where we would handle the messages from the WebView, passing them to the Rust SDK
         json?.let { interceptedMessages.tryEmit(it) }
+    }
+
+    // sTalk: Inject CSS to hide Element Call UI and make video full-screen (Telegram-style)
+    private fun injectCallOverlayCSS(view: WebView) {
+        view.evaluateJavascript(
+            """
+            (function() {
+                var styleId = 'stalk-call-overlay-css';
+                if (document.getElementById(styleId)) return;
+
+                var css = '' +
+                    '[class*="_header_"], [class*="_Header_"] { display: none !important; }' +
+                    '[class*="_footer_"], [class*="_Footer_"] { display: none !important; }' +
+                    '[class*="_toolbar_"], [class*="_Toolbar_"] { display: none !important; }' +
+                    '[class*="_controls_"], [class*="_Controls_"] { display: none !important; }' +
+                    '[class*="_bar_"]:not([class*="_sidebar"]) { display: none !important; }' +
+                    '[class*="_lobby_"], [class*="_Lobby_"] { display: none !important; }' +
+                    '[class*="_logo_"], [class*="_Logo_"] { display: none !important; }' +
+                    '[class*="_invite_"], [class*="_Invite_"] { display: none !important; }' +
+                    '[class*="_hangup_"], [class*="_Hangup_"] { display: none !important; }' +
+                    '[class*="_button-row"], [class*="_ButtonRow"] { display: none !important; }' +
+                    'header, footer, nav { display: none !important; }' +
+                    'body { background: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }' +
+                    'video { object-fit: cover !important; width: 100% !important; height: 100% !important; }' +
+                    '[class*="_avatar_"], [class*="_Avatar_"] { display: none !important; }' +
+                    '[class*="_no-video"], [class*="_noVideo"] { background: #000 !important; }';
+
+                var style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = css;
+                document.head.appendChild(style);
+
+                // MutationObserver to re-apply CSS if React re-renders and removes our style
+                var observer = new MutationObserver(function() {
+                    if (!document.getElementById(styleId)) {
+                        var s = document.createElement('style');
+                        s.id = styleId;
+                        s.textContent = css;
+                        document.head.appendChild(s);
+                    }
+                });
+                observer.observe(document.documentElement, { childList: true, subtree: true });
+
+                // Delayed re-application for async React rendering
+                [500, 1500, 3000].forEach(function(delay) {
+                    setTimeout(function() {
+                        if (!document.getElementById(styleId)) {
+                            var s = document.createElement('style');
+                            s.id = styleId;
+                            s.textContent = css;
+                            document.head.appendChild(s);
+                        }
+                    }, delay);
+                });
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    // sTalk: Inject JS bridge for native call controls ↔ WebView state sync
+    fun injectControlsBridge(view: WebView) {
+        view.evaluateJavascript(
+            """
+            (function() {
+                if (window._stalkControlsBridgeInit) return;
+                window._stalkControlsBridgeInit = true;
+
+                // Listen for mute state changes from Element Call
+                var origAudioMute = null;
+                function hookAudioTrack() {
+                    var tracks = document.querySelectorAll('audio, video');
+                    tracks.forEach(function(el) {
+                        if (el.srcObject) {
+                            el.srcObject.getAudioTracks().forEach(function(track) {
+                                if (!track._stalkHooked) {
+                                    track._stalkHooked = true;
+                                    var origEnabled = Object.getOwnPropertyDescriptor(
+                                        MediaStreamTrack.prototype, 'enabled'
+                                    );
+                                    // We'll detect changes via polling instead
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // Poll for control state changes and report to native
+                var lastMuteState = null;
+                var lastVideoState = null;
+                setInterval(function() {
+                    try {
+                        // Check mute buttons
+                        var muteBtn = document.querySelector('[class*="_mute"], [aria-label*="Mute"], [aria-label*="mute"], [data-testid*="mute"]');
+                        var isMuted = muteBtn ? (muteBtn.getAttribute('aria-pressed') === 'true' || muteBtn.classList.toString().indexOf('active') >= 0) : false;
+
+                        var videoBtn = document.querySelector('[class*="_video"], [aria-label*="Video"], [aria-label*="camera"], [data-testid*="video"]');
+                        var isVideoOff = videoBtn ? (videoBtn.getAttribute('aria-pressed') === 'true' || videoBtn.classList.toString().indexOf('active') >= 0) : false;
+
+                        if (isMuted !== lastMuteState) {
+                            lastMuteState = isMuted;
+                            if (window.stalkCallControls) window.stalkCallControls.onMuteChanged(isMuted);
+                        }
+                        if (isVideoOff !== lastVideoState) {
+                            lastVideoState = isVideoOff;
+                            if (window.stalkCallControls) window.stalkCallControls.onVideoChanged(!isVideoOff);
+                        }
+                    } catch(e) {}
+                }, 500);
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    // sTalk: Toggle mute in the WebView
+    fun toggleMuteInWebView() {
+        webView.evaluateJavascript(
+            """
+            (function() {
+                var btn = document.querySelector('[class*="_mute"], [aria-label*="Mute"], [aria-label*="mute"], [data-testid*="mute"]');
+                if (btn) btn.click();
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    // sTalk: Toggle video in the WebView
+    fun toggleVideoInWebView() {
+        webView.evaluateJavascript(
+            """
+            (function() {
+                var btn = document.querySelector('[class*="_video"], [aria-label*="Video"], [aria-label*="camera"], [data-testid*="video"]');
+                if (btn) btn.click();
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    // sTalk: Trigger hangup in the WebView
+    fun hangupInWebView() {
+        webView.evaluateJavascript(
+            """
+            (function() {
+                var btn = document.querySelector('[class*="_hangup"], [aria-label*="Hang up"], [aria-label*="hangup"], [data-testid*="hangup"]');
+                if (btn) btn.click();
+            })();
+            """.trimIndent(),
+            null,
+        )
     }
 }

@@ -33,6 +33,11 @@ interface RecordingRepository {
         sessionId: String,
         roomId: String,
     ): Result<RecordingsListResponse>
+
+    suspend fun getActiveRecording(
+        sessionId: String,
+        roomId: String,
+    ): Result<ActiveRecordingResponse>
 }
 
 @SingleIn(AppScope::class)
@@ -86,6 +91,17 @@ class DefaultRecordingRepository @Inject constructor(
         api.getRecordings(
             authorization = getAuthHeader(sessionId),
             roomId = roomId,
+        )
+    }
+
+    override suspend fun getActiveRecording(
+        sessionId: String,
+        roomId: String,
+    ): Result<ActiveRecordingResponse> = runCatching {
+        Timber.d("Checking active recording for room $roomId")
+        api.getActiveRecording(
+            authorization = getAuthHeader(sessionId),
+            matrixRoomId = roomId,
         )
     }
 }

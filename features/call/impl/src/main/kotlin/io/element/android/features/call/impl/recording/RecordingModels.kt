@@ -55,3 +55,11 @@ data class RecordingsListResponse(
     @SerialName("recordings")
     val recordings: List<RecordingItem>,
 )
+
+@Serializable
+data class ActiveRecordingResponse(
+    @SerialName("recording_id")
+    val recordingId: String? = null,
+    @SerialName("active")
+    val active: Boolean,
+)

@@ -15,4 +15,10 @@ sealed interface CallScreenEvents {
     data class SetupMessageChannels(val widgetMessageInterceptor: WidgetMessageInterceptor) : CallScreenEvents
     data class OnWebViewError(val description: String?) : CallScreenEvents
     data object ToggleRecording : CallScreenEvents
+    // sTalk: Native call control events
+    data object ToggleMute : CallScreenEvents
+    data object ToggleVideo : CallScreenEvents
+    data object ToggleSpeaker : CallScreenEvents
+    data class OnMuteStateChanged(val isMuted: Boolean) : CallScreenEvents
+    data class OnVideoStateChanged(val isVideoEnabled: Boolean) : CallScreenEvents
 }

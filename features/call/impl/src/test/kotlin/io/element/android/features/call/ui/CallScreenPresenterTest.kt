@@ -14,6 +14,7 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import im.vector.app.features.analytics.plan.MobileScreen
 import io.element.android.features.call.api.CallType
+import io.element.android.features.call.impl.recording.ActiveRecordingResponse
 import io.element.android.features.call.impl.recording.RecordingRepository
 import io.element.android.features.call.impl.recording.RecordingsListResponse
 import io.element.android.features.call.impl.recording.StartRecordingResponse
@@ -444,5 +445,12 @@ private class FakeRecordingRepository : RecordingRepository {
         roomId: String,
     ): Result<RecordingsListResponse> = Result.success(
         RecordingsListResponse(recordings = emptyList())
+    )
+
+    override suspend fun getActiveRecording(
+        sessionId: String,
+        roomId: String,
+    ): Result<ActiveRecordingResponse> = Result.success(
+        ActiveRecordingResponse(recordingId = null, active = false)
     )
 }

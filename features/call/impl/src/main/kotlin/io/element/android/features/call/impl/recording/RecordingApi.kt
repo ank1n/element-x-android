@@ -32,4 +32,10 @@ internal interface RecordingApi {
         @Header("Authorization") authorization: String,
         @Query("room_id") roomId: String,
     ): RecordingsListResponse
+
+    @GET("recording-api/active")
+    suspend fun getActiveRecording(
+        @Header("Authorization") authorization: String,
+        @Query("matrixRoomId") matrixRoomId: String,
+    ): ActiveRecordingResponse
 }
