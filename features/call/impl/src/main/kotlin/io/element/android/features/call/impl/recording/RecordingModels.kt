@@ -12,9 +12,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class StartRecordingRequest(
-    @SerialName("room_id")
+    @SerialName("matrixRoomId")
     val roomId: String,
-    @SerialName("livekit_room_name")
+    @SerialName("roomName")
     val livekitRoomName: String,
 )
 
