@@ -40,9 +40,13 @@ class DefaultAppsRepository @Inject constructor(
 
     override suspend fun getWidgets(category: String?): Result<List<WidgetItem>> = runCatching {
         Timber.d("Fetching widgets, category=$category")
-        api.getWidgets(
+        val allWidgets = api.getWidgets(
             authorization = getAuthHeader(),
-            category = category,
-        ).widgets
+        ).widgets.filter { it.enabled }
+        if (category != null) {
+            allWidgets.filter { it.type == category }
+        } else {
+            allWidgets
+        }
     }
 }

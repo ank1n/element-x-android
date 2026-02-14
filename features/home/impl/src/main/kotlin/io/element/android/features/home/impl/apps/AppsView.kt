@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import timber.log.Timber
 import io.element.android.features.home.impl.components.StalkUnderlineFilter
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarData
@@ -51,6 +52,7 @@ fun AppsView(
     modifier: Modifier = Modifier,
 ) {
     if (state.selectedWidget != null) {
+        Timber.d("AppsView: Opening widget WebView: ${state.selectedWidget.id} url=${state.selectedWidget.url}")
         WidgetWebView(
             widget = state.selectedWidget,
             onClose = { state.eventSink(AppsEvent.CloseWidget) },
@@ -133,11 +135,14 @@ private fun WidgetListView(
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(
                         items = state.widgets,
-                        key = { it.widgetId },
+                        key = { it.id },
                     ) { widget ->
                         WidgetListItem(
                             widget = widget,
-                            onClick = { state.eventSink(AppsEvent.OpenWidget(widget)) },
+                            onClick = {
+                                Timber.d("AppsView: Widget clicked: ${widget.id} name=${widget.name}")
+                                state.eventSink(AppsEvent.OpenWidget(widget))
+                            },
                         )
                     }
                 }
@@ -161,8 +166,9 @@ private fun WidgetListItem(
     ) {
         Avatar(
             avatarData = AvatarData(
-                id = widget.roomId,
-                name = widget.roomName,
+                id = widget.id,
+                name = widget.name,
+                url = widget.icon?.let { if (it.startsWith("http")) it else "https://stalk.implica.ru$it" },
                 size = AvatarSize.UserListItem,
             ),
             avatarType = AvatarType.Room(),
@@ -174,11 +180,13 @@ private fun WidgetListItem(
                 style = ElementTheme.typography.fontBodyLgMedium,
                 color = ElementTheme.colors.textPrimary,
             )
-            Text(
-                text = widget.roomName,
-                style = ElementTheme.typography.fontBodySmRegular,
-                color = ElementTheme.colors.textSecondary,
-            )
+            if (!widget.description.isNullOrEmpty()) {
+                Text(
+                    text = widget.description,
+                    style = ElementTheme.typography.fontBodySmRegular,
+                    color = ElementTheme.colors.textSecondary,
+                )
+            }
         }
         Icon(
             imageVector = CompoundIcons.ChevronRight(),
@@ -211,7 +219,7 @@ private fun WidgetWebView(
             },
         )
         WidgetWebViewContent(
-            url = widget.url,
+            url = if (widget.url.startsWith("http")) widget.url else "https://stalk.implica.ru${widget.url}",
             modifier = Modifier.fillMaxSize(),
         )
     }
@@ -223,6 +231,7 @@ private fun WidgetWebViewContent(
     url: String,
     modifier: Modifier = Modifier,
 ) {
+    Timber.d("WidgetWebViewContent: Loading URL: $url")
     AndroidView(
         factory = { context ->
             WebView(context).apply {
@@ -230,7 +239,14 @@ private fun WidgetWebViewContent(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT,
                 )
-                webViewClient = WebViewClient()
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, pageUrl: String?) {
+                        Timber.d("WidgetWebView: Page loaded: $pageUrl")
+                    }
+                    override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
+                        Timber.e("WidgetWebView: Error loading $failingUrl: $errorCode $description")
+                    }
+                }
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 loadUrl(url)

@@ -12,10 +12,8 @@ import kotlinx.collections.immutable.persistentListOf
 
 enum class AppsCategory(val apiValue: String?, val displayName: String) {
     All(apiValue = null, displayName = "All"),
-    Tools(apiValue = "tools", displayName = "Tools"),
-    Fun(apiValue = "fun", displayName = "Fun"),
-    Productivity(apiValue = "productivity", displayName = "Productivity"),
-    Other(apiValue = "other", displayName = "Other"),
+    Widgets(apiValue = "widget", displayName = "Widgets"),
+    SmartApps(apiValue = "smartapp", displayName = "Smart Apps"),
 }
 
 data class AppsState(

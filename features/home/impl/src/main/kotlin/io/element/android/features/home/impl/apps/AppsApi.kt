@@ -9,12 +9,10 @@ package io.element.android.features.home.impl.apps
 
 import retrofit2.http.GET
 import retrofit2.http.Header
-import retrofit2.http.Query
 
 internal interface AppsApi {
     @GET("apps-api/widgets")
     suspend fun getWidgets(
         @Header("Authorization") authorization: String,
-        @Query("category") category: String? = null,
     ): WidgetsResponse
 }

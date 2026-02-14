@@ -12,24 +12,26 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class WidgetItem(
-    @SerialName("room_id")
-    val roomId: String,
-    @SerialName("room_name")
-    val roomName: String,
-    @SerialName("widget_id")
-    val widgetId: String,
+    @SerialName("id")
+    val id: String,
     @SerialName("name")
     val name: String,
+    @SerialName("description")
+    val description: String? = null,
+    @SerialName("icon")
+    val icon: String? = null,
     @SerialName("url")
     val url: String,
     @SerialName("type")
     val type: String,
-    @SerialName("category")
-    val category: String? = null,
+    @SerialName("enabled")
+    val enabled: Boolean = true,
 )
 
 @Serializable
 data class WidgetsResponse(
     @SerialName("widgets")
     val widgets: List<WidgetItem>,
+    @SerialName("total")
+    val total: Int = 0,
 )
