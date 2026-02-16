@@ -20,7 +20,5 @@ sealed interface CallScreenEvents {
     data object ToggleVideo : CallScreenEvents
     data object ToggleSpeaker : CallScreenEvents
     data object ToggleHandRaise : CallScreenEvents
-    data class OnMuteStateChanged(val isMuted: Boolean) : CallScreenEvents
-    data class OnVideoStateChanged(val isVideoEnabled: Boolean) : CallScreenEvents
     data class OnHandRaiseStateChanged(val isHandRaised: Boolean) : CallScreenEvents
 }

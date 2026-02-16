@@ -22,7 +22,11 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.element.android.features.call.impl.BuildConfig
+import io.element.android.features.call.impl.livekit.LiveKitCredentials
+import io.element.android.features.call.impl.livekit.LiveKitJwtDecoder
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import timber.log.Timber
 
 class WebViewWidgetMessageInterceptor(
@@ -40,6 +44,10 @@ class WebViewWidgetMessageInterceptor(
     // It's important to have extra capacity here to make sure we don't drop any messages
     override val interceptedMessages = MutableSharedFlow<String>(extraBufferCapacity = 10)
 
+    // sTalk: LiveKit credentials flow — emitted when WebSocket URL + token are intercepted
+    private val _livekitCredentials = MutableSharedFlow<LiveKitCredentials>(extraBufferCapacity = 1)
+    val livekitCredentials: SharedFlow<LiveKitCredentials> = _livekitCredentials.asSharedFlow()
+
     init {
         val assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(webView.context))
@@ -48,6 +56,35 @@ class WebViewWidgetMessageInterceptor(
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+
+                // sTalk: Hide all WebView content — native LiveKit SDK handles video rendering
+                view.evaluateJavascript(
+                    """
+                        (function() {
+                            var s = document.createElement('style');
+                            s.textContent = 'body, body * { visibility:hidden!important; height:0!important; width:0!important; overflow:hidden!important; }';
+                            (document.head || document.documentElement).appendChild(s);
+                        })();
+                    """.trimIndent(),
+                    null
+                )
+
+                // sTalk: Suppress getUserMedia so WebView doesn't capture camera/microphone
+                view.evaluateJavascript(
+                    """
+                        (function() {
+                            if (window._stalkMediaSuppressed) return;
+                            window._stalkMediaSuppressed = true;
+                            if (navigator.mediaDevices) {
+                                navigator.mediaDevices.getUserMedia = function() {
+                                    console.log('[sTalk] getUserMedia suppressed — native SDK handles media');
+                                    return Promise.reject(new DOMException('Media handled by native SDK', 'NotAllowedError'));
+                                };
+                            }
+                        })();
+                    """.trimIndent(),
+                    null
+                )
 
                 // Due to https://github.com/element-hq/element-x-android/issues/4097
                 // we need to supply a logging implementation that correctly includes
@@ -66,6 +103,49 @@ class WebViewWidgetMessageInterceptor(
                         globalThis.console.info = logFn.bind(null, console.info);
                         globalThis.console.warn = logFn.bind(null, console.warn);
                         globalThis.console.error = logFn.bind(null, console.error);
+                    """.trimIndent(),
+                    null
+                )
+
+                // sTalk: Hook WebSocket to intercept LiveKit signaling URL + access_token
+                view.evaluateJavascript(
+                    """
+                        (function() {
+                            if (window._stalkWSHooked) return;
+                            window._stalkWSHooked = true;
+                            var OrigWS = window.WebSocket;
+                            window.WebSocket = function(url, protocols) {
+                                var urlStr = String(url);
+                                var isLiveKit = urlStr.indexOf('livekit') >= 0 || urlStr.indexOf('/rtc') >= 0;
+                                if (isLiveKit) {
+                                    console.log('[sTalk-ws] LiveKit WebSocket URL: ' + urlStr.substring(0, 200));
+                                    // Extract access_token from URL
+                                    try {
+                                        var urlObj = new URL(urlStr);
+                                        var token = urlObj.searchParams.get('access_token');
+                                        if (token && window.stalkLiveKit) {
+                                            var wsUrl = urlObj.protocol.replace('ws', 'http') + '//' + urlObj.host;
+                                            console.log('[sTalk-ws] Credentials intercepted, sending to native');
+                                            window.stalkLiveKit.onCredentialsIntercepted(wsUrl, token);
+                                        }
+                                    } catch(e) {
+                                        console.log('[sTalk-ws] Failed to extract credentials: ' + e.message);
+                                    }
+                                }
+                                var ws;
+                                if (protocols !== undefined) {
+                                    ws = new OrigWS(urlStr, protocols);
+                                } else {
+                                    ws = new OrigWS(urlStr);
+                                }
+                                return ws;
+                            };
+                            window.WebSocket.prototype = OrigWS.prototype;
+                            window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+                            window.WebSocket.OPEN = OrigWS.OPEN;
+                            window.WebSocket.CLOSING = OrigWS.CLOSING;
+                            window.WebSocket.CLOSED = OrigWS.CLOSED;
+                        })();
                     """.trimIndent(),
                     null
                 )
@@ -93,8 +173,6 @@ class WebViewWidgetMessageInterceptor(
             }
 
             override fun onPageFinished(view: WebView, url: String) {
-                // sTalk: Inject CSS to hide Element Call native UI and make video full-screen
-                injectCallOverlayCSS(view)
                 onUrlLoaded(url)
             }
 
@@ -174,161 +252,22 @@ class WebViewWidgetMessageInterceptor(
         json?.let { interceptedMessages.tryEmit(it) }
     }
 
-    // sTalk: Inject CSS to hide Element Call UI controls (Telegram-style overlay)
-    // Hides UI chrome (headers, footers, controls, lobby) but preserves video grid for group calls
-    private fun injectCallOverlayCSS(view: WebView) {
-        view.evaluateJavascript(
-            """
-            (function() {
-                var styleId = 'stalk-call-overlay-css';
-                if (document.getElementById(styleId)) return;
-
-                var css = '' +
-                    /* Hide UI chrome elements */
-                    '[class*="_header_"], [class*="_Header_"] { display: none !important; }' +
-                    '[class*="_footer_"], [class*="_Footer_"] { display: none !important; }' +
-                    '[class*="_toolbar_"], [class*="_Toolbar_"] { display: none !important; }' +
-                    '[class*="_controls_"], [class*="_Controls_"] { display: none !important; }' +
-                    '[class*="_bar_"]:not([class*="_sidebar"]) { display: none !important; }' +
-                    '[class*="_lobby_"], [class*="_Lobby_"] { display: none !important; }' +
-                    '[class*="_logo_"], [class*="_Logo_"] { display: none !important; }' +
-                    '[class*="_invite_"], [class*="_Invite_"] { display: none !important; }' +
-                    '[class*="_hangup_"], [class*="_Hangup_"] { display: none !important; }' +
-                    '[class*="_button-row"], [class*="_ButtonRow"] { display: none !important; }' +
-                    'header, footer, nav { display: none !important; }' +
-                    /* Body background */
-                    'body { background: #000 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }' +
-                    /* Video tiles: cover fit, let grid handle sizing */
-                    'video { object-fit: cover !important; }' +
-                    /* Hide participant name overlays inside video tiles */
-                    '.lk-participant-name, [class*="_displayName"], [class*="_participant-name"] { display: none !important; }' +
-                    /* No-video placeholders */
-                    '[class*="_no-video"], [class*="_noVideo"] { background: #000 !important; }' +
-                    /* Grid layouts: fill available space */
-                    '.lk-grid-layout, .lk-focus-layout { width: 100% !important; height: 100% !important; }' +
-                    /* Participant tiles in grid: remove padding/margins for clean tiling */
-                    '.lk-participant-tile { border-radius: 8px !important; overflow: hidden !important; }';
-
-                var style = document.createElement('style');
-                style.id = styleId;
-                style.textContent = css;
-                document.head.appendChild(style);
-
-                // MutationObserver to re-apply CSS if React re-renders and removes our style
-                var observer = new MutationObserver(function() {
-                    if (!document.getElementById(styleId)) {
-                        var s = document.createElement('style');
-                        s.id = styleId;
-                        s.textContent = css;
-                        document.head.appendChild(s);
-                    }
-                });
-                observer.observe(document.documentElement, { childList: true, subtree: true });
-
-                // Delayed re-application for async React rendering
-                [500, 1500, 3000].forEach(function(delay) {
-                    setTimeout(function() {
-                        if (!document.getElementById(styleId)) {
-                            var s = document.createElement('style');
-                            s.id = styleId;
-                            s.textContent = css;
-                            document.head.appendChild(s);
-                        }
-                    }, delay);
-                });
-            })();
-            """.trimIndent(),
-            null,
+    // sTalk: Called from JS when LiveKit WebSocket credentials are intercepted
+    fun onLiveKitCredentials(url: String, token: String) {
+        val roomName = LiveKitJwtDecoder.decodeRoomName(token)
+        if (roomName == null) {
+            Timber.w("Failed to decode room name from LiveKit JWT")
+            return
+        }
+        // Convert HTTP(S) URL back to WSS for LiveKit SDK
+        val wsUrl = url.replace("http://", "ws://").replace("https://", "wss://")
+        val credentials = LiveKitCredentials(
+            url = wsUrl,
+            token = token,
+            roomName = roomName,
         )
-    }
-
-    // sTalk: Inject JS bridge for native call controls ↔ WebView state sync
-    fun injectControlsBridge(view: WebView) {
-        view.evaluateJavascript(
-            """
-            (function() {
-                if (window._stalkControlsBridgeInit) return;
-                window._stalkControlsBridgeInit = true;
-
-                // Listen for mute state changes from Element Call
-                var origAudioMute = null;
-                function hookAudioTrack() {
-                    var tracks = document.querySelectorAll('audio, video');
-                    tracks.forEach(function(el) {
-                        if (el.srcObject) {
-                            el.srcObject.getAudioTracks().forEach(function(track) {
-                                if (!track._stalkHooked) {
-                                    track._stalkHooked = true;
-                                    var origEnabled = Object.getOwnPropertyDescriptor(
-                                        MediaStreamTrack.prototype, 'enabled'
-                                    );
-                                    // We'll detect changes via polling instead
-                                }
-                            });
-                        }
-                    });
-                }
-
-                // Poll for control state changes and report to native
-                var lastMuteState = null;
-                var lastVideoState = null;
-                var lastHandRaiseState = null;
-                setInterval(function() {
-                    try {
-                        // Check mute buttons
-                        var muteBtn = document.querySelector('[class*="_mute"], [aria-label*="Mute"], [aria-label*="mute"], [data-testid*="mute"]');
-                        var isMuted = muteBtn ? (muteBtn.getAttribute('aria-pressed') === 'true' || muteBtn.classList.toString().indexOf('active') >= 0) : false;
-
-                        var videoBtn = document.querySelector('[class*="_video"], [aria-label*="Video"], [aria-label*="camera"], [data-testid*="video"]');
-                        var isVideoOff = videoBtn ? (videoBtn.getAttribute('aria-pressed') === 'true' || videoBtn.classList.toString().indexOf('active') >= 0) : false;
-
-                        var handBtn = document.querySelector('[aria-label*="Hand"], [aria-label*="hand"], [data-testid*="hand"], [class*="_hand"], [class*="Hand"]');
-                        var isHandRaised = handBtn ? (handBtn.getAttribute('aria-pressed') === 'true' || handBtn.classList.toString().indexOf('active') >= 0) : false;
-
-                        if (isMuted !== lastMuteState) {
-                            lastMuteState = isMuted;
-                            if (window.stalkCallControls) window.stalkCallControls.onMuteChanged(isMuted);
-                        }
-                        if (isVideoOff !== lastVideoState) {
-                            lastVideoState = isVideoOff;
-                            if (window.stalkCallControls) window.stalkCallControls.onVideoChanged(!isVideoOff);
-                        }
-                        if (isHandRaised !== lastHandRaiseState) {
-                            lastHandRaiseState = isHandRaised;
-                            if (window.stalkCallControls) window.stalkCallControls.onHandRaiseChanged(isHandRaised);
-                        }
-                    } catch(e) {}
-                }, 500);
-            })();
-            """.trimIndent(),
-            null,
-        )
-    }
-
-    // sTalk: Toggle mute in the WebView
-    fun toggleMuteInWebView() {
-        webView.evaluateJavascript(
-            """
-            (function() {
-                var btn = document.querySelector('[class*="_mute"], [aria-label*="Mute"], [aria-label*="mute"], [data-testid*="mute"]');
-                if (btn) btn.click();
-            })();
-            """.trimIndent(),
-            null,
-        )
-    }
-
-    // sTalk: Toggle video in the WebView
-    fun toggleVideoInWebView() {
-        webView.evaluateJavascript(
-            """
-            (function() {
-                var btn = document.querySelector('[class*="_video"], [aria-label*="Video"], [aria-label*="camera"], [data-testid*="video"]');
-                if (btn) btn.click();
-            })();
-            """.trimIndent(),
-            null,
-        )
+        Timber.d("LiveKit credentials intercepted: url=$wsUrl, room=$roomName")
+        _livekitCredentials.tryEmit(credentials)
     }
 
     // sTalk: Toggle hand raise in the WebView

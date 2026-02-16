@@ -341,6 +341,10 @@ licensee {
     allowUrl("https://asm.ow2.io/license.html")
     allowUrl("https://www.gnu.org/licenses/agpl-3.0.txt")
     allowUrl("https://github.com/mhssn95/compose-color-picker/blob/main/LICENSE")
+    // Required by io.livekit:livekit-android transitive dependencies
+    allowUrl("https://github.com/twilio/audioswitch/blob/master/LICENSE.txt")
+    allowUrl("https://opensource.org/license/bsd-3-clause/")
+    allowUrl("http://www.gnu.org/licenses/license-list.html#PublicDomain")
     ignoreDependencies("com.github.matrix-org", "matrix-analytics-events")
     // Ignore dependency that are not third-party licenses to us.
     ignoreDependencies(groupId = "io.element.android")

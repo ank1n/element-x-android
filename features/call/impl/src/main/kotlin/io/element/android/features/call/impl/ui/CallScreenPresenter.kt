@@ -25,6 +25,8 @@ import im.vector.app.features.analytics.plan.MobileScreen
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.call.api.CallType
 import io.element.android.features.call.impl.data.WidgetMessage
+import io.element.android.features.call.impl.livekit.ConnectionState
+import io.element.android.features.call.impl.livekit.LiveKitCallManager
 import io.element.android.features.call.impl.recording.RecordingRepository
 import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.features.call.impl.utils.ActiveCallManager
@@ -48,9 +50,12 @@ import io.element.android.services.appnavstate.api.AppForegroundStateService
 import io.element.android.services.toolbox.api.systemclock.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import timber.log.Timber
 import java.util.UUID
 import kotlin.time.Duration.Companion.seconds
@@ -80,6 +85,7 @@ class CallScreenPresenter(
 
     private val isInWidgetMode = callType is CallType.RoomCall
     private val userAgent = userAgentProvider.provide()
+    private var liveKitCallManager: LiveKitCallManager? = null
 
     @Composable
     override fun present(): CallScreenState {
@@ -101,6 +107,10 @@ class CallScreenPresenter(
         var participantName by remember { mutableStateOf("") }
         var avatarData by remember { mutableStateOf<AvatarData?>(null) }
         var isDm by remember { mutableStateOf(false) }
+        // sTalk: Native LiveKit state
+        var isLiveKitConnected by remember { mutableStateOf(false) }
+        var localVideoTrack by remember { mutableStateOf<io.livekit.android.room.track.VideoTrack?>(null) }
+        var remoteParticipantsList by remember { mutableStateOf<List<io.livekit.android.room.participant.RemoteParticipant>>(emptyList()) }
         val languageTag = languageTagProvider.provideLanguageTag()
         val theme = if (ElementTheme.isLightTheme) "light" else "dark"
 
@@ -118,6 +128,43 @@ class CallScreenPresenter(
             }
             onDispose {
                 appCoroutineScope.launch { activeCallManager.hungUpCall(callType) }
+            }
+        }
+
+        // sTalk: Initialize LiveKitCallManager
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val lkManager = remember(context) {
+            LiveKitCallManager(
+                context = context.applicationContext,
+                coroutineScope = coroutineScope,
+            ).also { liveKitCallManager = it }
+        }
+
+        // sTalk: Collect LiveKit state
+        LaunchedEffect(lkManager) {
+            launch {
+                lkManager.connectionState.collect { state ->
+                    isLiveKitConnected = state == ConnectionState.CONNECTED
+                }
+            }
+            launch {
+                lkManager.localVideoTrack.collect { track ->
+                    localVideoTrack = track
+                }
+            }
+            launch {
+                lkManager.remoteParticipants.collect { participants ->
+                    remoteParticipantsList = participants
+                }
+            }
+        }
+
+        // sTalk: Connect to LiveKit when credentials are intercepted
+        LaunchedEffect(messageInterceptor.value) {
+            val interceptor = messageInterceptor.value as? WebViewWidgetMessageInterceptor ?: return@LaunchedEffect
+            interceptor.livekitCredentials.collectLatest { credentials ->
+                Timber.d("LiveKit credentials received, connecting...")
+                lkManager.connect(credentials)
             }
         }
 
@@ -252,18 +299,33 @@ class CallScreenPresenter(
                     val widgetId = callWidgetDriver.value?.id
                     val interceptor = messageInterceptor.value
                     if (widgetId != null && interceptor != null && isWidgetLoaded) {
-                        // If the call was joined, we need to hang up first. Then the UI will be dismissed automatically.
-                        sendHangupMessage(widgetId, interceptor)
                         isWidgetLoaded = false
-
                         coroutineScope.launch {
-                            // Wait for a couple of seconds to receive the hangup message
-                            // If we don't get it in time, we close the screen anyway
+                            // 1. Stop recording if active
+                            if (recordingState is RecordingState.Recording) {
+                                toggleRecording(
+                                    currentState = recordingState,
+                                    onStateChange = { recordingState = it },
+                                )
+                            }
+                            // 2. JS click hangup in EC WebView
+                            (interceptor as? WebViewWidgetMessageInterceptor)?.hangupInWebView()
+                            // 3. Widget API hangup (fallback)
+                            sendHangupMessage(widgetId, interceptor)
+                            // 4. Wait for EC to process hangup
                             delay(2.seconds)
+                            // 5. Widget driver close (sends io.element.close for MatrixRTC cleanup)
+                            // This happens in close() below
+                            // 6. Wait for cleanup
+                            delay(1.seconds)
+                            // 7. Disconnect native LiveKit
+                            liveKitCallManager?.disconnect()
+                            // 8. Close screen
                             close(callWidgetDriver.value, navigator)
                         }
                     } else {
                         coroutineScope.launch {
+                            liveKitCallManager?.disconnect()
                             close(callWidgetDriver.value, navigator)
                         }
                     }
@@ -285,32 +347,33 @@ class CallScreenPresenter(
                         )
                     }
                 }
-                // sTalk: Native call control events
+                // sTalk: Native call control events — routed to LiveKit SDK
                 is CallScreenEvents.ToggleMute -> {
-                    val interceptor = messageInterceptor.value
-                    if (interceptor is WebViewWidgetMessageInterceptor) {
-                        interceptor.toggleMuteInWebView()
-                    }
                     isMuted = !isMuted
+                    liveKitCallManager?.setMicrophoneEnabled(!isMuted)
+                    sendDeviceMuteMessage(
+                        widgetId = callWidgetDriver.value?.id,
+                        interceptor = messageInterceptor.value,
+                        audioEnabled = !isMuted,
+                        videoEnabled = isVideoEnabled,
+                    )
                 }
                 is CallScreenEvents.ToggleVideo -> {
-                    val interceptor = messageInterceptor.value
-                    if (interceptor is WebViewWidgetMessageInterceptor) {
-                        interceptor.toggleVideoInWebView()
-                    }
                     isVideoEnabled = !isVideoEnabled
+                    liveKitCallManager?.setCameraEnabled(isVideoEnabled)
+                    sendDeviceMuteMessage(
+                        widgetId = callWidgetDriver.value?.id,
+                        interceptor = messageInterceptor.value,
+                        audioEnabled = !isMuted,
+                        videoEnabled = isVideoEnabled,
+                    )
                 }
                 is CallScreenEvents.ToggleSpeaker -> {
                     isSpeakerOn = !isSpeakerOn
-                    // Speaker toggle is handled natively via WebViewAudioManager
-                }
-                is CallScreenEvents.OnMuteStateChanged -> {
-                    isMuted = event.isMuted
-                }
-                is CallScreenEvents.OnVideoStateChanged -> {
-                    isVideoEnabled = event.isVideoEnabled
+                    liveKitCallManager?.setSpeakerEnabled(isSpeakerOn)
                 }
                 is CallScreenEvents.ToggleHandRaise -> {
+                    // Hand raise stays through WebView DOM (signaling-only)
                     val interceptor = messageInterceptor.value
                     if (interceptor is WebViewWidgetMessageInterceptor) {
                         interceptor.toggleHandRaiseInWebView()
@@ -338,6 +401,10 @@ class CallScreenPresenter(
             avatarData = avatarData,
             isDm = isDm,
             callDurationSeconds = callDurationSeconds,
+            isLiveKitConnected = isLiveKitConnected,
+            localVideoTrack = localVideoTrack,
+            remoteParticipants = remoteParticipantsList,
+            liveKitCallManager = lkManager,
             eventSink = ::handleEvent,
         )
     }
@@ -399,6 +466,26 @@ class CallScreenPresenter(
         return widgetMessageSerializer.deserialize(message).getOrNull()
     }
 
+    private fun sendDeviceMuteMessage(
+        widgetId: String?,
+        interceptor: WidgetMessageInterceptor?,
+        audioEnabled: Boolean,
+        videoEnabled: Boolean,
+    ) {
+        if (widgetId == null || interceptor == null) return
+        val message = WidgetMessage(
+            direction = WidgetMessage.Direction.ToWidget,
+            widgetId = widgetId,
+            requestId = "widgetapi-${clock.epochMillis()}",
+            action = WidgetMessage.Action.DeviceMute,
+            data = buildJsonObject {
+                put("audio_enabled", JsonPrimitive(audioEnabled))
+                put("video_enabled", JsonPrimitive(videoEnabled))
+            },
+        )
+        interceptor.sendMessage(widgetMessageSerializer.serialize(message))
+    }
+
     private fun sendHangupMessage(widgetId: String, messageInterceptor: WidgetMessageInterceptor) {
         val message = WidgetMessage(
             direction = WidgetMessage.Direction.ToWidget,
@@ -421,7 +508,8 @@ class CallScreenPresenter(
                 val result = recordingRepository.startRecording(
                     sessionId = roomCall.sessionId.value,
                     roomId = roomCall.roomId.value,
-                    livekitRoomName = "livekit_${roomCall.roomId.value}",
+                    livekitRoomName = liveKitCallManager?.roomName?.value
+                        ?: "livekit_${roomCall.roomId.value}",
                 )
                 result.fold(
                     onSuccess = { response ->

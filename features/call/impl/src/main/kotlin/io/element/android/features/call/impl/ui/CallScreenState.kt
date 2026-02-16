@@ -8,7 +8,10 @@
 
 package io.element.android.features.call.impl.ui
 
+import io.element.android.features.call.impl.livekit.LiveKitCallManager
 import io.element.android.features.call.impl.recording.RecordingState
+import io.livekit.android.room.participant.RemoteParticipant
+import io.livekit.android.room.track.VideoTrack
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.designsystem.components.avatar.AvatarData
 
@@ -28,5 +31,10 @@ data class CallScreenState(
     val avatarData: AvatarData? = null,
     val isDm: Boolean = false,
     val callDurationSeconds: Long = 0L,
+    // sTalk: Native LiveKit state
+    val isLiveKitConnected: Boolean = false,
+    val localVideoTrack: VideoTrack? = null,
+    val remoteParticipants: List<RemoteParticipant> = emptyList(),
+    val liveKitCallManager: LiveKitCallManager? = null,
     val eventSink: (CallScreenEvents) -> Unit,
 )

@@ -38,6 +38,9 @@ roborazzi = "1.58.0"
 datetime = "0.7.1"
 serialization_json = "1.10.0"
 
+# LiveKit
+livekit = "2.12.0"
+
 #other
 coil = "3.3.0"
 # Rollback to 1.0.4, 1.0.5 has this issue: https://github.com/airbnb/Showkase/issues/420
@@ -232,6 +235,9 @@ metro_runtime = { module = "dev.zacsweers.metro:runtime", version.ref = "metro" 
 
 # Element Call
 element_call_embedded = "io.element.android:element-call-embedded:0.16.3"
+
+# LiveKit
+livekit_android = { module = "io.livekit:livekit-android", version.ref = "livekit" }
 
 # Auto services
 google_autoservice = { module = "com.google.auto.service:auto-service", version.ref = "autoservice" }
