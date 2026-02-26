@@ -9,7 +9,9 @@
 package io.element.android.features.call.impl.ui
 
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import io.element.android.features.call.impl.recording.RecordingState
 import io.element.android.libraries.architecture.AsyncData
+import io.element.android.libraries.designsystem.components.avatar.AvatarData
 
 open class CallScreenStateProvider : PreviewParameterProvider<CallScreenState> {
     override val values: Sequence<CallScreenState>
@@ -27,6 +29,15 @@ internal fun aCallScreenState(
     userAgent: String = "",
     isCallActive: Boolean = true,
     isInWidgetMode: Boolean = false,
+    recordingState: RecordingState = RecordingState.Idle,
+    isMuted: Boolean = false,
+    isVideoEnabled: Boolean = true,
+    isSpeakerOn: Boolean = true,
+    isHandRaised: Boolean = false,
+    participantName: String = "",
+    avatarData: AvatarData? = null,
+    isDm: Boolean = false,
+    callDurationSeconds: Long = 0L,
     eventSink: (CallScreenEvents) -> Unit = {},
 ): CallScreenState {
     return CallScreenState(
@@ -35,6 +46,15 @@ internal fun aCallScreenState(
         userAgent = userAgent,
         isCallActive = isCallActive,
         isInWidgetMode = isInWidgetMode,
+        recordingState = recordingState,
+        isMuted = isMuted,
+        isVideoEnabled = isVideoEnabled,
+        isSpeakerOn = isSpeakerOn,
+        isHandRaised = isHandRaised,
+        participantName = participantName,
+        avatarData = avatarData,
+        isDm = isDm,
+        callDurationSeconds = callDurationSeconds,
         eventSink = eventSink,
     )
 }

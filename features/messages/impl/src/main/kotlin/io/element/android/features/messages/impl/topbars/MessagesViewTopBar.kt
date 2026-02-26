@@ -40,6 +40,7 @@ import io.element.android.libraries.designsystem.components.avatar.AvatarData
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
 import io.element.android.libraries.designsystem.components.avatar.AvatarType
 import io.element.android.libraries.designsystem.components.avatar.anAvatarData
+import androidx.compose.material3.IconButton
 import io.element.android.libraries.designsystem.components.button.BackButton
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
@@ -67,6 +68,7 @@ internal fun MessagesViewTopBar(
     sharedHistoryIcon: SharedHistoryIcon,
     onRoomDetailsClick: () -> Unit,
     onJoinCallClick: () -> Unit,
+    onSearchClick: () -> Unit,
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -127,6 +129,13 @@ internal fun MessagesViewTopBar(
             }
         },
         actions = {
+            // sTalk: Search button
+            IconButton(onClick = onSearchClick) {
+                Icon(
+                    imageVector = CompoundIcons.Search(),
+                    contentDescription = "Search messages",
+                )
+            }
             CallMenuItem(
                 roomCallState = roomCallState,
                 onJoinCallClick = onJoinCallClick,
@@ -196,6 +205,7 @@ internal fun MessagesViewTopBarPreview() = ElementPreview {
         sharedHistoryIcon = sharedHistoryIcon,
         onRoomDetailsClick = {},
         onJoinCallClick = {},
+        onSearchClick = {},
         onBackClick = {},
     )
     Column {

@@ -34,6 +34,8 @@ import io.element.android.features.messages.impl.link.LinkState
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerEvent
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerState
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
+import io.element.android.features.messages.impl.search.InRoomSearchEvent
+import io.element.android.features.messages.impl.search.InRoomSearchState
 import io.element.android.features.messages.impl.timeline.MarkAsFullyRead
 import io.element.android.features.messages.impl.timeline.TimelineController
 import io.element.android.features.messages.impl.timeline.TimelineEvent
@@ -225,6 +227,66 @@ class MessagesPresenter(
             onPauseOrDispose {}
         }
 
+        // sTalk: In-room search state
+        var searchActive by rememberSaveable { mutableStateOf(false) }
+        var searchQuery by rememberSaveable { mutableStateOf("") }
+        var searchCurrentIndex by rememberSaveable { mutableStateOf(-1) }
+
+        val searchMatchingIds by remember(searchQuery, timelineState.timelineItems) {
+            derivedStateOf {
+                if (searchQuery.length < 2) {
+                    emptyList()
+                } else {
+                    val query = searchQuery.lowercase()
+                    timelineState.timelineItems.filterIsInstance<TimelineItem.Event>()
+                        .filter { event ->
+                            val content = event.content
+                            when (content) {
+                                is TimelineItemTextBasedContent -> content.plainText.lowercase().contains(query)
+                                else -> false
+                            }
+                        }
+                        .map { it.id }
+                }
+            }
+        }
+
+        val inRoomSearchState = InRoomSearchState(
+            isActive = searchActive,
+            query = searchQuery,
+            matchingItemIds = searchMatchingIds.toImmutableList(),
+            currentMatchIndex = searchCurrentIndex,
+            eventSink = { event ->
+                when (event) {
+                    InRoomSearchEvent.ToggleSearch -> {
+                        searchActive = !searchActive
+                        if (!searchActive) {
+                            searchQuery = ""
+                            searchCurrentIndex = -1
+                        }
+                    }
+                    is InRoomSearchEvent.QueryChanged -> {
+                        searchQuery = event.query
+                        searchCurrentIndex = if (event.query.length >= 2) 0 else -1
+                    }
+                    InRoomSearchEvent.NextMatch -> {
+                        if (searchMatchingIds.isNotEmpty()) {
+                            searchCurrentIndex = (searchCurrentIndex + 1) % searchMatchingIds.size
+                        }
+                    }
+                    InRoomSearchEvent.PreviousMatch -> {
+                        if (searchMatchingIds.isNotEmpty()) {
+                            searchCurrentIndex = if (searchCurrentIndex <= 0) {
+                                searchMatchingIds.size - 1
+                            } else {
+                                searchCurrentIndex - 1
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
         fun handleEvent(event: MessagesEvent) {
             when (event) {
                 is MessagesEvent.HandleAction -> {
@@ -296,6 +358,7 @@ class MessagesPresenter(
             roomMemberModerationState = roomMemberModerationState,
             topBarSharedHistoryIcon = topBarSharedHistoryIcon,
             successorRoom = roomInfo.successorRoom,
+            inRoomSearchState = inRoomSearchState,
             eventSink = ::handleEvent,
         )
     }

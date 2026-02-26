@@ -87,6 +87,7 @@ dependencies {
     implementation(libs.network.retrofit)
     implementation(libs.serialization.json)
     implementation(libs.element.call.embedded)
+    implementation(libs.livekit.android)
     api(projects.features.call.api)
 
     testCommonDependencies(libs, true)

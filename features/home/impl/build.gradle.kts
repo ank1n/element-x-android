@@ -12,6 +12,7 @@ import extension.testCommonDependencies
 plugins {
     id("io.element.android-compose-library")
     id("kotlin-parcelize")
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -59,6 +60,10 @@ dependencies {
     implementation(projects.features.reportroom.api)
     implementation(projects.features.rolesandpermissions.api)
     implementation(projects.libraries.previewutils)
+    implementation(projects.libraries.network)
+    implementation(projects.libraries.sessionStorage.api)
+    implementation(libs.network.retrofit)
+    implementation(libs.serialization.json)
     api(projects.features.home.api)
 
     testCommonDependencies(libs, true)

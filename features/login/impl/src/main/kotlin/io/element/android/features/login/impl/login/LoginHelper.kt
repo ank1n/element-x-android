@@ -38,6 +38,7 @@ class LoginHelper(
     private val oidcActionFlow: OidcActionFlow,
     private val authenticationService: MatrixAuthenticationService,
     private val webClientUrlForAuthenticationRetriever: WebClientUrlForAuthenticationRetriever,
+    private val keycloakDirectLoginService: KeycloakDirectLoginService,
 ) {
     private val loginModeState: MutableState<AsyncData<LoginMode>> = mutableStateOf(AsyncData.Uninitialized)
 
@@ -88,6 +89,18 @@ class LoginHelper(
                 }
             }
         )
+    }
+
+    suspend fun nativeOidcLogin(homeserverUrl: String, username: String, password: String) {
+        loginModeState.value = AsyncData.Loading()
+        try {
+            authenticationService.setHomeserver(homeserverUrl).getOrThrow()
+            val oidcDetails = authenticationService.getOidcUrl(OidcPrompt.Login, null).getOrThrow()
+            val callbackUrl = keycloakDirectLoginService.login(oidcDetails.url, username, password)
+            authenticationService.loginWithOidc(callbackUrl).getOrThrow()
+        } catch (e: Exception) {
+            loginModeState.value = AsyncData.Failure(e)
+        }
     }
 
     private suspend fun onOidcAction(oidcAction: OidcAction) {

@@ -8,6 +8,7 @@
 
 package io.element.android.features.home.impl
 
+import io.element.android.features.home.impl.apps.AppsState
 import io.element.android.features.home.impl.roomlist.RoomListState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spaces.HomeSpacesState
@@ -30,10 +31,11 @@ data class HomeState(
     val snackbarMessage: SnackbarMessage?,
     val canReportBug: Boolean,
     val directLogoutState: DirectLogoutState,
+    val appsState: AppsState = AppsState(),
     val eventSink: (HomeEvent) -> Unit,
 ) {
     val isBackHandlerEnabled = currentHomeNavigationBarItem != HomeNavigationBarItem.Chats || roomListState.spaceFiltersState is SpaceFiltersState.Selected
     val displayActions = currentHomeNavigationBarItem == HomeNavigationBarItem.Chats
     val displayRoomListFilters = currentHomeNavigationBarItem == HomeNavigationBarItem.Chats && roomListState.displayFilters
-    val showNavigationBar = homeSpacesState.canCreateSpaces || homeSpacesState.spaceRooms.isNotEmpty()
+    val showNavigationBar = true
 }

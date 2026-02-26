@@ -21,6 +21,8 @@ dependencyResolutionManagement {
             url = uri("https://www.jitpack.io")
             content {
                 includeModule("com.github.matrix-org", "matrix-analytics-events")
+                // Required by io.livekit:livekit-android
+                includeModule("com.github.davidliu", "audioswitch")
             }
         }
         google()

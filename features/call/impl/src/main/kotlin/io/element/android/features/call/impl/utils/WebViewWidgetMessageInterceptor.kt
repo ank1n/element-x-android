@@ -22,7 +22,11 @@ import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.element.android.features.call.impl.BuildConfig
+import io.element.android.features.call.impl.livekit.LiveKitCredentials
+import io.element.android.features.call.impl.livekit.LiveKitJwtDecoder
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import timber.log.Timber
 
 class WebViewWidgetMessageInterceptor(
@@ -40,6 +44,10 @@ class WebViewWidgetMessageInterceptor(
     // It's important to have extra capacity here to make sure we don't drop any messages
     override val interceptedMessages = MutableSharedFlow<String>(extraBufferCapacity = 10)
 
+    // sTalk: LiveKit credentials flow — emitted when WebSocket URL + token are intercepted
+    private val _livekitCredentials = MutableSharedFlow<LiveKitCredentials>(extraBufferCapacity = 1)
+    val livekitCredentials: SharedFlow<LiveKitCredentials> = _livekitCredentials.asSharedFlow()
+
     init {
         val assetLoader = WebViewAssetLoader.Builder()
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(webView.context))
@@ -48,6 +56,35 @@ class WebViewWidgetMessageInterceptor(
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+
+                // sTalk: Hide all WebView content — native LiveKit SDK handles video rendering
+                view.evaluateJavascript(
+                    """
+                        (function() {
+                            var s = document.createElement('style');
+                            s.textContent = 'body, body * { visibility:hidden!important; height:0!important; width:0!important; overflow:hidden!important; }';
+                            (document.head || document.documentElement).appendChild(s);
+                        })();
+                    """.trimIndent(),
+                    null
+                )
+
+                // sTalk: Suppress getUserMedia so WebView doesn't capture camera/microphone
+                view.evaluateJavascript(
+                    """
+                        (function() {
+                            if (window._stalkMediaSuppressed) return;
+                            window._stalkMediaSuppressed = true;
+                            if (navigator.mediaDevices) {
+                                navigator.mediaDevices.getUserMedia = function() {
+                                    console.log('[sTalk] getUserMedia suppressed — native SDK handles media');
+                                    return Promise.reject(new DOMException('Media handled by native SDK', 'NotAllowedError'));
+                                };
+                            }
+                        })();
+                    """.trimIndent(),
+                    null
+                )
 
                 // Due to https://github.com/element-hq/element-x-android/issues/4097
                 // we need to supply a logging implementation that correctly includes
@@ -66,6 +103,49 @@ class WebViewWidgetMessageInterceptor(
                         globalThis.console.info = logFn.bind(null, console.info);
                         globalThis.console.warn = logFn.bind(null, console.warn);
                         globalThis.console.error = logFn.bind(null, console.error);
+                    """.trimIndent(),
+                    null
+                )
+
+                // sTalk: Hook WebSocket to intercept LiveKit signaling URL + access_token
+                view.evaluateJavascript(
+                    """
+                        (function() {
+                            if (window._stalkWSHooked) return;
+                            window._stalkWSHooked = true;
+                            var OrigWS = window.WebSocket;
+                            window.WebSocket = function(url, protocols) {
+                                var urlStr = String(url);
+                                var isLiveKit = urlStr.indexOf('livekit') >= 0 || urlStr.indexOf('/rtc') >= 0;
+                                if (isLiveKit) {
+                                    console.log('[sTalk-ws] LiveKit WebSocket URL: ' + urlStr.substring(0, 200));
+                                    // Extract access_token from URL
+                                    try {
+                                        var urlObj = new URL(urlStr);
+                                        var token = urlObj.searchParams.get('access_token');
+                                        if (token && window.stalkLiveKit) {
+                                            var wsUrl = urlObj.protocol.replace('ws', 'http') + '//' + urlObj.host;
+                                            console.log('[sTalk-ws] Credentials intercepted, sending to native');
+                                            window.stalkLiveKit.onCredentialsIntercepted(wsUrl, token);
+                                        }
+                                    } catch(e) {
+                                        console.log('[sTalk-ws] Failed to extract credentials: ' + e.message);
+                                    }
+                                }
+                                var ws;
+                                if (protocols !== undefined) {
+                                    ws = new OrigWS(urlStr, protocols);
+                                } else {
+                                    ws = new OrigWS(urlStr);
+                                }
+                                return ws;
+                            };
+                            window.WebSocket.prototype = OrigWS.prototype;
+                            window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+                            window.WebSocket.OPEN = OrigWS.OPEN;
+                            window.WebSocket.CLOSING = OrigWS.CLOSING;
+                            window.WebSocket.CLOSED = OrigWS.CLOSED;
+                        })();
                     """.trimIndent(),
                     null
                 )
@@ -170,5 +250,49 @@ class WebViewWidgetMessageInterceptor(
     private fun onMessageReceived(json: String?) {
         // Here is where we would handle the messages from the WebView, passing them to the Rust SDK
         json?.let { interceptedMessages.tryEmit(it) }
+    }
+
+    // sTalk: Called from JS when LiveKit WebSocket credentials are intercepted
+    fun onLiveKitCredentials(url: String, token: String) {
+        val roomName = LiveKitJwtDecoder.decodeRoomName(token)
+        if (roomName == null) {
+            Timber.w("Failed to decode room name from LiveKit JWT")
+            return
+        }
+        // Convert HTTP(S) URL back to WSS for LiveKit SDK
+        val wsUrl = url.replace("http://", "ws://").replace("https://", "wss://")
+        val credentials = LiveKitCredentials(
+            url = wsUrl,
+            token = token,
+            roomName = roomName,
+        )
+        Timber.d("LiveKit credentials intercepted: url=$wsUrl, room=$roomName")
+        _livekitCredentials.tryEmit(credentials)
+    }
+
+    // sTalk: Toggle hand raise in the WebView
+    fun toggleHandRaiseInWebView() {
+        webView.evaluateJavascript(
+            """
+            (function() {
+                var btn = document.querySelector('[aria-label*="Hand"], [aria-label*="hand"], [data-testid*="hand"], [class*="_hand"], [class*="Hand"]');
+                if (btn) btn.click();
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    // sTalk: Trigger hangup in the WebView
+    fun hangupInWebView() {
+        webView.evaluateJavascript(
+            """
+            (function() {
+                var btn = document.querySelector('[class*="_hangup"], [aria-label*="Hang up"], [aria-label*="hangup"], [data-testid*="hangup"]');
+                if (btn) btn.click();
+            })();
+            """.trimIndent(),
+            null,
+        )
     }
 }

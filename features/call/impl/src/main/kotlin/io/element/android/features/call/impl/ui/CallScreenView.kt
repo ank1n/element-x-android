@@ -20,25 +20,22 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import io.element.android.features.call.impl.R
+import io.element.android.features.call.impl.livekit.LiveKitCallManager
+import io.element.android.features.call.impl.livekit.LiveKitPipController
+import io.element.android.features.call.impl.livekit.VideoGrid
 import io.element.android.features.call.impl.pip.PictureInPictureEvents
 import io.element.android.features.call.impl.pip.PictureInPictureState
 import io.element.android.features.call.impl.pip.aPictureInPictureState
-import io.element.android.features.call.impl.utils.InvalidAudioDeviceReason
-import io.element.android.features.call.impl.utils.WebViewAudioManager
-import io.element.android.features.call.impl.utils.WebViewPipController
 import io.element.android.features.call.impl.utils.WebViewWidgetMessageInterceptor
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.designsystem.components.ProgressDialog
@@ -64,6 +61,7 @@ internal fun CallScreenView(
     requestPermissions: (Array<String>, RequestPermissionCallback) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val liveKitCallManager = state.liveKitCallManager
     fun handleBack() {
         if (pipState.supportPip) {
             pipState.eventSink.invoke(PictureInPictureEvents.EnterPictureInPicture)
@@ -87,58 +85,72 @@ internal fun CallScreenView(
                 onSubmit = { state.eventSink(CallScreenEvents.Hangup) },
             )
         } else {
-            var webViewAudioManager by remember { mutableStateOf<WebViewAudioManager?>(null) }
-            val coroutineScope = rememberCoroutineScope()
+            Box(modifier = Modifier
+                .padding(padding)
+                .consumeWindowInsets(padding)
+                .fillMaxSize()
+            ) {
+                // 1. Native video grid (sTalk: LiveKit SDK rendering)
+                if (state.isLiveKitConnected && liveKitCallManager != null) {
+                    VideoGrid(
+                        localVideoTrack = state.localVideoTrack,
+                        remoteParticipants = state.remoteParticipants,
+                        eglBase = liveKitCallManager.eglBase,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
 
-            var invalidAudioDeviceReason by remember { mutableStateOf<InvalidAudioDeviceReason?>(null) }
-            invalidAudioDeviceReason?.let {
-                InvalidAudioDeviceDialog(invalidAudioDeviceReason = it) {
-                    invalidAudioDeviceReason = null
+                // 2. Invisible WebView for signaling only (1x1px)
+                CallWebView(
+                    modifier = Modifier
+                        .size(1.dp)
+                        .alpha(0f),
+                    url = state.urlState,
+                    userAgent = state.userAgent,
+                    onPermissionsRequest = { request ->
+                        // Grant all permissions — actual media is handled by native SDK
+                        request.grant(request.resources)
+                    },
+                    onConsoleMessage = onConsoleMessage,
+                    onCreateWebView = { webView ->
+                        webView.addBackHandler(onBackPressed = ::handleBack)
+                        var interceptorRef: WebViewWidgetMessageInterceptor? = null
+                        // sTalk: Register JS interface for LiveKit credential interception
+                        webView.addJavascriptInterface(object {
+                            @Suppress("unused")
+                            @JavascriptInterface
+                            fun onCredentialsIntercepted(url: String, token: String) {
+                                interceptorRef?.onLiveKitCredentials(url, token)
+                            }
+                        }, "stalkLiveKit")
+                        val interceptor = WebViewWidgetMessageInterceptor(
+                            webView = webView,
+                            onUrlLoaded = { url ->
+                                webView.evaluateJavascript("controls.onBackButtonPressed = () => { backHandler.onBackPressed() }", null)
+                                Timber.d("URL $url is loaded (signaling-only WebView)")
+                            },
+                            onError = { state.eventSink(CallScreenEvents.OnWebViewError(it)) },
+                        )
+                        interceptorRef = interceptor
+                        state.eventSink(CallScreenEvents.SetupMessageChannels(interceptor))
+                        // sTalk: Use LiveKit PiP controller instead of WebView PiP
+                        if (liveKitCallManager != null) {
+                            val pipController = LiveKitPipController(liveKitCallManager)
+                            pipState.eventSink(PictureInPictureEvents.SetPipController(pipController))
+                        }
+                    },
+                    onDestroyWebView = {
+                        // No-op: audio managed by NativeAudioManager inside LiveKitCallManager
+                    }
+                )
+
+                // 3. Native call controls overlay (unchanged)
+                if (state.isCallActive && state.isInWidgetMode) {
+                    CallControlsOverlay(
+                        state = state,
+                    )
                 }
             }
-
-            CallWebView(
-                modifier = Modifier
-                    .padding(padding)
-                    .consumeWindowInsets(padding)
-                    .fillMaxSize(),
-                url = state.urlState,
-                userAgent = state.userAgent,
-                onPermissionsRequest = { request ->
-                    val androidPermissions = mapWebkitPermissions(request.resources)
-                    val callback: RequestPermissionCallback = { request.grant(it) }
-                    requestPermissions(androidPermissions.toTypedArray(), callback)
-                },
-                onConsoleMessage = onConsoleMessage,
-                onCreateWebView = { webView ->
-                    webView.addBackHandler(onBackPressed = ::handleBack)
-                    val interceptor = WebViewWidgetMessageInterceptor(
-                        webView = webView,
-                        onUrlLoaded = { url ->
-                            webView.evaluateJavascript("controls.onBackButtonPressed = () => { backHandler.onBackPressed() }", null)
-                            if (webViewAudioManager?.isInCallMode?.get() == false) {
-                                Timber.d("URL $url is loaded, starting in-call audio mode")
-                                webViewAudioManager?.onCallStarted()
-                            } else {
-                                Timber.d("Can't start in-call audio mode since the app is already in it.")
-                            }
-                        },
-                        onError = { state.eventSink(CallScreenEvents.OnWebViewError(it)) },
-                    )
-                    webViewAudioManager = WebViewAudioManager(
-                        webView = webView,
-                        coroutineScope = coroutineScope,
-                        onInvalidAudioDeviceAdded = { invalidAudioDeviceReason = it },
-                    )
-                    state.eventSink(CallScreenEvents.SetupMessageChannels(interceptor))
-                    val pipController = WebViewPipController(webView)
-                    pipState.eventSink(PictureInPictureEvents.SetPipController(pipController))
-                },
-                onDestroyWebView = {
-                    // Reset audio mode
-                    webViewAudioManager?.onCallStopped()
-                }
-            )
             when (state.urlState) {
                 AsyncData.Uninitialized,
                 is AsyncData.Loading ->
@@ -154,21 +166,6 @@ internal fun CallScreenView(
             }
         }
     }
-}
-
-@Composable
-private fun InvalidAudioDeviceDialog(
-    invalidAudioDeviceReason: InvalidAudioDeviceReason,
-    onDismiss: () -> Unit,
-) {
-    ErrorDialog(
-        content = when (invalidAudioDeviceReason) {
-            InvalidAudioDeviceReason.BT_AUDIO_DEVICE_DISABLED -> {
-                stringResource(R.string.call_invalid_audio_device_bluetooth_devices_disabled)
-            }
-        },
-        onSubmit = onDismiss,
-    )
 }
 
 @Composable
@@ -217,10 +214,8 @@ private fun WebView.setup(
     onPermissionsRequested: (PermissionRequest) -> Unit,
     onConsoleMessage: (ConsoleMessage) -> Unit,
 ) {
-    layoutParams = ViewGroup.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.MATCH_PARENT
-    )
+    // sTalk: 1x1px — WebView is used for signaling only, not rendering
+    layoutParams = ViewGroup.LayoutParams(1, 1)
 
     with(settings) {
         javaScriptEnabled = true
@@ -270,8 +265,3 @@ internal fun CallScreenViewPreview(
     )
 }
 
-@PreviewsDayNight
-@Composable
-internal fun InvalidAudioDeviceDialogPreview() = ElementPreview {
-    InvalidAudioDeviceDialog(invalidAudioDeviceReason = InvalidAudioDeviceReason.BT_AUDIO_DEVICE_DISABLED) {}
-}

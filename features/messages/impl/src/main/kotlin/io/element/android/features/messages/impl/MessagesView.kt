@@ -65,6 +65,8 @@ import io.element.android.features.messages.impl.messagecomposer.MessageComposer
 import io.element.android.features.messages.impl.messagecomposer.suggestions.SuggestionsPickerView
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerView
+import io.element.android.features.messages.impl.search.InRoomSearchBar
+import io.element.android.features.messages.impl.search.InRoomSearchEvent
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerViewDefaults
 import io.element.android.features.messages.impl.timeline.FOCUS_ON_PINNED_EVENT_DEBOUNCE_DURATION_IN_MILLIS
 import io.element.android.features.messages.impl.timeline.TimelineEvent
@@ -229,15 +231,28 @@ fun MessagesView(
                             onBackClick = { hidingKeyboard { onBackClick() } },
                             onRoomDetailsClick = { hidingKeyboard { onRoomDetailsClick() } },
                             onJoinCallClick = onJoinCallClick,
+                            onSearchClick = {
+                                state.inRoomSearchState.eventSink(InRoomSearchEvent.ToggleSearch)
+                            },
                         )
                     }
                 },
                 content = { padding ->
-                    Box(
+                    Column(
                         modifier = Modifier
                             .padding(padding)
                             .consumeWindowInsets(padding)
                     ) {
+                        // sTalk: In-room search bar
+                        AnimatedVisibility(
+                            visible = state.inRoomSearchState.isActive,
+                            enter = expandVertically(),
+                            exit = shrinkVertically(),
+                        ) {
+                            InRoomSearchBar(state = state.inRoomSearchState)
+                        }
+
+                        Box(modifier = Modifier.weight(1f)) {
                         MessagesViewContent(
                             state = state,
                             onContentClick = ::onContentClick,
@@ -286,6 +301,7 @@ fun MessagesView(
                                 state.composerState.eventSink(MessageComposerEvent.InsertSuggestion(it))
                             }
                         )
+                    }
                     }
                 },
                 snackbarHost = {

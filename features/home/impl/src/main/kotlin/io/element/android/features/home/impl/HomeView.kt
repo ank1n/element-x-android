@@ -12,7 +12,9 @@ package io.element.android.features.home.impl
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -26,6 +28,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -41,6 +44,10 @@ import dev.chrisbanes.haze.materials.HazeMaterials
 import dev.chrisbanes.haze.rememberHazeState
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.features.home.impl.apps.AppsView
+import io.element.android.features.home.impl.calls.CallsView
+import io.element.android.features.home.impl.contacts.ContactsView
+import io.element.android.features.home.impl.settings.SettingsView
 import io.element.android.features.home.impl.components.HomeTopBar
 import io.element.android.features.home.impl.components.RoomListContentView
 import io.element.android.features.home.impl.components.RoomListMenuAction
@@ -53,12 +60,14 @@ import io.element.android.features.home.impl.search.RoomListSearchView
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersEvent
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersView
-import io.element.android.features.home.impl.spaces.HomeSpacesView
 import io.element.android.libraries.androidutils.throttler.FirstThrottler
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.FloatingActionButton
 import io.element.android.libraries.designsystem.theme.components.Icon
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.libraries.designsystem.theme.components.NavigationBar
 import io.element.android.libraries.designsystem.theme.components.NavigationBarIcon
 import io.element.android.libraries.designsystem.theme.components.NavigationBarItem
@@ -169,7 +178,6 @@ private fun HomeScaffold(
 
     val hazeState = rememberHazeState()
     val roomsLazyListState = rememberLazyListState()
-    val spacesLazyListState = rememberLazyListState()
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -201,22 +209,27 @@ private fun HomeScaffold(
         bottomBar = {
             if (state.showNavigationBar) {
                 val coroutineScope = rememberCoroutineScope()
+                val unreadCount = remember(roomListState.contentState) {
+                    when (val content = roomListState.contentState) {
+                        is RoomListContentState.Rooms -> content.summaries
+                            .sumOf { it.numberOfUnreadMessages }
+                        else -> 0L
+                    }
+                }
                 HomeBottomBar(
                     currentHomeNavigationBarItem = state.currentHomeNavigationBarItem,
+                    unreadCount = unreadCount,
                     onItemClick = { item ->
                         // scroll to top if selecting the same item
                         if (item == state.currentHomeNavigationBarItem) {
-                            val lazyListStateTarget = when (item) {
-                                HomeNavigationBarItem.Chats -> roomsLazyListState
-                                HomeNavigationBarItem.Spaces -> spacesLazyListState
-                            }
-                            coroutineScope.launch {
-                                if (lazyListStateTarget.firstVisibleItemIndex > 10) {
-                                    lazyListStateTarget.scrollToItem(10)
+                            if (item == HomeNavigationBarItem.Chats) {
+                                coroutineScope.launch {
+                                    if (roomsLazyListState.firstVisibleItemIndex > 10) {
+                                        roomsLazyListState.scrollToItem(10)
+                                    }
+                                    scrollBehavior.state.heightOffset = 0f
+                                    roomsLazyListState.animateScrollToItem(0)
                                 }
-                                // Also reset the scrollBehavior height offset as it's not triggered by programmatic scrolls
-                                scrollBehavior.state.heightOffset = 0f
-                                lazyListStateTarget.animateScrollToItem(0)
                             }
                         } else {
                             state.eventSink(HomeEvent.SelectHomeNavigationBarItem(item))
@@ -231,6 +244,28 @@ private fun HomeScaffold(
         },
         content = { padding ->
             when (state.currentHomeNavigationBarItem) {
+                HomeNavigationBarItem.Contacts -> {
+                    ContactsView(
+                        contentState = roomListState.contentState,
+                        onContactClick = { onRoomClick(it) },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .consumeWindowInsets(padding)
+                            .hazeSource(state = hazeState)
+                    )
+                }
+                HomeNavigationBarItem.Calls -> {
+                    CallsView(
+                        contentState = roomListState.contentState,
+                        onRoomClick = { onRoomClick(it) },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .consumeWindowInsets(padding)
+                            .hazeSource(state = hazeState)
+                    )
+                }
                 HomeNavigationBarItem.Chats -> {
                     RoomListContentView(
                         contentState = roomListState.contentState,
@@ -267,21 +302,28 @@ private fun HomeScaffold(
                     )
                     SpaceFiltersView(roomListState.spaceFiltersState)
                 }
-                HomeNavigationBarItem.Spaces -> {
-                    HomeSpacesView(
+                HomeNavigationBarItem.Apps -> {
+                    AppsView(
+                        state = state.appsState,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(padding)
                             .consumeWindowInsets(padding)
-                            .hazeSource(state = hazeState),
-                        state = state.homeSpacesState,
-                        lazyListState = spacesLazyListState,
-                        onSpaceClick = { spaceId ->
-                            onRoomClick(spaceId)
-                        },
-                        onCreateSpaceClick = onCreateSpaceClick,
-                        // TODO use actual callbacks for this
-                        onExploreClick = {},
+                            .hazeSource(state = hazeState)
+                    )
+                }
+                HomeNavigationBarItem.Settings -> {
+                    SettingsView(
+                        matrixUser = state.currentUserAndNeighbors.firstOrNull()
+                            ?: io.element.android.libraries.matrix.api.user.MatrixUser(
+                                userId = io.element.android.libraries.matrix.api.core.UserId("@unknown:server")
+                            ),
+                        onOpenSettings = onOpenSettings,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding)
+                            .consumeWindowInsets(padding)
+                            .hazeSource(state = hazeState)
                     )
                 }
             }
@@ -305,6 +347,7 @@ private fun HomeScaffold(
 @Composable
 private fun HomeBottomBar(
     currentHomeNavigationBarItem: HomeNavigationBarItem,
+    unreadCount: Long,
     onItemClick: (HomeNavigationBarItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -320,9 +363,25 @@ private fun HomeBottomBar(
                     onItemClick(item)
                 },
                 icon = {
-                    NavigationBarIcon(
-                        imageVector = item.icon(isSelected),
-                    )
+                    if (item == HomeNavigationBarItem.Chats && unreadCount > 0) {
+                        BadgedBox(
+                            badge = {
+                                Badge {
+                                    androidx.compose.material3.Text(
+                                        text = if (unreadCount > 99) "99+" else unreadCount.toString(),
+                                    )
+                                }
+                            }
+                        ) {
+                            NavigationBarIcon(
+                                imageVector = item.icon(isSelected),
+                            )
+                        }
+                    } else {
+                        NavigationBarIcon(
+                            imageVector = item.icon(isSelected),
+                        )
+                    }
                 },
                 label = {
                     NavigationBarText(

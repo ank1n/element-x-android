@@ -165,6 +165,10 @@ class LoginFlowNode(
                         backstack.push(NavTarget.CreateAccount(url))
                     }
 
+                    override fun navigateToChangeServer() {
+                        backstack.push(NavTarget.ConfirmAccountProvider(isAccountCreation = false))
+                    }
+
                     override fun navigateToLoginPassword() {
                         backstack.push(NavTarget.LoginPassword)
                     }

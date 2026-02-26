@@ -60,10 +60,9 @@ class DefaultFtueService(
     init {
         combine(
             sessionVerificationService.sessionVerifiedStatus.onEach { sessionVerifiedStatus ->
-                if (sessionVerifiedStatus == SessionVerifiedStatus.NotVerified) {
-                    // Ensure we wait for the user to confirm the session verified screen before going further
-                    userNeedsToConfirmSessionVerificationSuccess.value = true
-                }
+                // sTalk: skip device verification for corporate environment
+                // Original code sets userNeedsToConfirmSessionVerificationSuccess = true
+                // when status is NotVerified, which blocks FTUE from completing
             },
             userNeedsToConfirmSessionVerificationSuccess,
             analyticsService.didAskUserConsentFlow.distinctUntilChanged(),
@@ -116,11 +115,13 @@ class DefaultFtueService(
     }
 
     private suspend fun isSessionNotVerified(): Boolean {
-        return sessionVerificationService.sessionVerifiedStatus.value == SessionVerifiedStatus.NotVerified && !canSkipVerification()
+        // sTalk: skip device verification for corporate environment
+        return false
     }
 
     private suspend fun canSkipVerification(): Boolean {
-        return sessionPreferencesStore.isSessionVerificationSkipped().first()
+        // sTalk: skip device verification for corporate environment
+        return true
     }
 
     private suspend fun needsAnalyticsOptIn(): Boolean {

@@ -13,6 +13,11 @@ sealed interface OnBoardingEvents {
         val defaultAccountProvider: String
     ) : OnBoardingEvents
 
+    data class OnNativeLogin(
+        val username: String,
+        val password: String,
+    ) : OnBoardingEvents
+
     data object OnVersionClick : OnBoardingEvents
     data object ClearError : OnBoardingEvents
 }

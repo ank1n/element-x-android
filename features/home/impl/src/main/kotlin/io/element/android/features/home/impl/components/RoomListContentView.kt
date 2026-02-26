@@ -268,14 +268,30 @@ private fun RoomsViewList(
             items = state.summaries,
             contentType = { _, room -> room.contentType() },
         ) { index, room ->
-            RoomSummaryRow(
-                room = room,
-                hideInviteAvatars = hideInvitesAvatars,
-                isInviteSeen = room.displayType == RoomSummaryDisplayType.INVITE &&
-                    state.seenRoomInvites.contains(room.roomId),
-                onClick = onRoomClick,
-                eventSink = eventSink,
-            )
+            // sTalk: Wrap rooms (not invites/placeholders) with swipe actions
+            if (room.displayType == RoomSummaryDisplayType.ROOM) {
+                SwipeableRoomItem(
+                    onMarkAsRead = { eventSink(RoomListEvent.MarkAsRead(room.roomId)) },
+                    onToggleFavorite = { eventSink(RoomListEvent.SetRoomIsFavorite(room.roomId, !room.isFavorite)) },
+                ) {
+                    RoomSummaryRow(
+                        room = room,
+                        hideInviteAvatars = hideInvitesAvatars,
+                        isInviteSeen = false,
+                        onClick = onRoomClick,
+                        eventSink = eventSink,
+                    )
+                }
+            } else {
+                RoomSummaryRow(
+                    room = room,
+                    hideInviteAvatars = hideInvitesAvatars,
+                    isInviteSeen = room.displayType == RoomSummaryDisplayType.INVITE &&
+                        state.seenRoomInvites.contains(room.roomId),
+                    onClick = onRoomClick,
+                    eventSink = eventSink,
+                )
+            }
             if (index != state.summaries.lastIndex) {
                 HorizontalDivider()
             }
